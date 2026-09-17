@@ -1,0 +1,6 @@
+{
+  "name": "homebound-backend", "private": true, "version": "0.1.0", "type": "module",
+  "scripts": { "dev": "tsx watch src/server.ts", "build": "tsc && tsc-alias", "start": "node dist/server.js" },
+  "dependencies": { "@supabase/supabase-js": "latest", "cors": "latest", "dotenv": "latest", "express": "latest", "zod": "latest" },
+  "devDependencies": { "@types/cors": "latest", "@types/express": "latest", "@types/node": "latest", "tsc-alias": "latest", "tsx": "latest", "typescript": "latest" }
+}

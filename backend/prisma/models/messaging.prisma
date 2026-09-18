@@ -1,0 +1,64 @@
+model MessageRequest {
+  id          BigInt   @id @default(autoincrement())
+  senderId    BigInt   @map("sender_id")
+  recipientId BigInt   @map("recipient_id")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  respondedAt DateTime? @map("responded_at") @db.Timestamptz(6)
+  sender      User     @relation("MessageRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("MessageRequestRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, recipientId], map: "message_requests_one_pending_request", where: raw("(status = 'pending'::text)"))
+  @@index([recipientId, status, createdAt(sort: Desc)], map: "message_requests_recipient_status_index")
+  @@map("message_requests")
+}
+
+model Conversation {
+  id        BigInt               @id @default(autoincrement())
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId BigInt       @map("conversation_id")
+  userId         BigInt       @map("user_id")
+  joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, conversationId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             BigInt            @id @default(autoincrement())
+  conversationId BigInt            @map("conversation_id")
+  senderId       BigInt            @map("sender_id")
+  content        String
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt       DateTime?         @map("edited_at") @db.Timestamptz(6)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation(fields: [senderId], references: [id])
+  reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MessageReaction {
+  messageId BigInt   @map("message_id")
+  userId    BigInt   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("message_reactions")
+}

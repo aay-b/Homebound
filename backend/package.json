@@ -1,6 +1,31 @@
 {
-  "name": "homebound-backend", "private": true, "version": "0.1.0", "type": "module",
-  "scripts": { "dev": "tsx watch src/server.ts", "build": "tsc && tsc-alias", "start": "node dist/server.js" },
-  "dependencies": { "@supabase/supabase-js": "latest", "cors": "latest", "dotenv": "latest", "express": "latest", "zod": "latest" },
-  "devDependencies": { "@types/cors": "latest", "@types/express": "latest", "@types/node": "latest", "tsc-alias": "latest", "tsx": "latest", "typescript": "latest" }
+  "name": "homebound-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc && tsc-alias",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@supabase/supabase-js": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "pg": "^8.23.0",
+    "prisma": "^7.10.0",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/pg": "^8.23.1",
+    "tsc-alias": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
 }

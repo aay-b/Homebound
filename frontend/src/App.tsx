@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Register from "./pages/Register";
 
 export function App() {
     return (
@@ -11,6 +12,8 @@ export function App() {
                         </main>
                     }
                 />
+
+                <Route path="/register" element={<Register />} />
 
                 {/* <Route path="/URL ADD-ON" element={<PAGE FUNCTION IMPORTED/>}/> */}
 

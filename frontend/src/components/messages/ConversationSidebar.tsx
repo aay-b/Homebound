@@ -17,7 +17,7 @@ export function ConversationSidebar({
 }: ConversationSidebarProps) {
   return (
     <aside className="w-full border-b border-slate-200 bg-white lg:w-[320px] lg:border-b-0 lg:border-r">
-      <div className="border-b border-slate-100 px-5 py-5">
+      <div className="border-b border-slate-100 px-5 py-4">
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-teal-500 focus-within:bg-white">
           <span aria-hidden="true">⌕</span>
           <input className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400" placeholder="Search people" />

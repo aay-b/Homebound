@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Conversation, Message } from '@/types/messages'
 
 type ChatWindowProps = {
@@ -17,9 +17,16 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [draft, setDraft] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    // Scroll only the message pane so receiving a message never moves the entire page.
+    const messagesContainer = messagesContainerRef.current
+    messagesContainer?.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' })
+  }, [conversation?.id, conversation?.messages.length])
 
   if (!conversation) {
-    return <section className="min-h-[640px] flex-1 bg-[#fcfdfd]" />
+    return <section className="h-[640px] flex-1 bg-[#fcfdfd]" />
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,7 +49,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }
 
   return (
-    <section className="flex min-h-[640px] flex-1 flex-col bg-[#fcfdfd]">
+    <section className="flex h-[640px] flex-1 flex-col bg-[#fcfdfd]">
       <header className="border-b border-slate-100 bg-white px-5 py-4 sm:px-7">
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-full bg-amber-100 text-sm font-bold text-amber-800">{conversation.participantInitials}</div>
@@ -52,7 +59,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
       </header>
 
-      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
+      <div ref={messagesContainerRef} className="flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
           const isEditing = editingMessageId === message.id
@@ -69,7 +76,12 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                         <button onClick={() => setEditingMessageId(null)} className="opacity-70">Cancel</button>
                       </div>
                     </div>
-                  ) : <p className="text-sm leading-6">{message.content}</p>}
+                  ) : (
+                    <>
+                      <p className="text-sm leading-6">{message.content}</p>
+                      <time dateTime={message.createdAt} className={`mt-1 block text-right text-[10px] ${isOwnMessage ? 'text-white/65' : 'text-slate-400'}`}>{message.sentAt}</time>
+                    </>
+                  )}
                   <div className="absolute right-0 top-full z-10 hidden w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg group-hover/message:flex" aria-label="Choose a reaction">
                     {reactionOptions.map((emoji) => <button key={emoji} onClick={() => onToggleReaction(message.id, emoji)} className="grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50">{emoji}</button>)}
                   </div>

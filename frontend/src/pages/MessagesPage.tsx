@@ -5,8 +5,9 @@ import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
 import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest, type IncomingMessageRequest, type OutgoingMessageRequest } from '@/services/messageRequests'
+import { getConversationMessages, type StoredMessage } from '@/services/messages'
 import { connectMessagingSocket } from '@/services/socket'
-import type { Conversation, MessageRequest } from '@/types/messages'
+import type { Conversation, Message, MessageRequest } from '@/types/messages'
 
 // Conversations start empty until the messaging API is connected.
 const initialConversations: Conversation[] = []
@@ -49,6 +50,43 @@ function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageReque
   }
 }
 
+function formatMessageTime(createdAt: string) {
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(createdAt))
+}
+
+function toMessage(storedMessage: StoredMessage): Message {
+  return {
+    id: storedMessage.id,
+    senderId: storedMessage.senderId,
+    content: storedMessage.content,
+    createdAt: storedMessage.createdAt,
+    sentAt: formatMessageTime(storedMessage.createdAt),
+    reactions: [],
+  }
+}
+
+function sortMessages(messages: Message[]) {
+  // Preserve server order even when two messages share the same timestamp.
+  return [...messages].sort((firstMessage, secondMessage) => {
+    const timeDifference = new Date(firstMessage.createdAt).getTime() - new Date(secondMessage.createdAt).getTime()
+    return timeDifference || firstMessage.id.localeCompare(secondMessage.id)
+  })
+}
+
+function mergeConversationMessages(conversation: Conversation, incomingMessages: Message[]): Conversation {
+  const messagesById = new Map(conversation.messages.map((message) => [message.id, message]))
+  incomingMessages.forEach((message) => messagesById.set(message.id, message))
+  const messages = sortMessages([...messagesById.values()])
+  const latestMessage = messages.at(-1)
+
+  return {
+    ...conversation,
+    messages,
+    lastMessage: latestMessage?.content ?? '',
+    lastMessageTime: latestMessage?.sentAt ?? '',
+  }
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -65,7 +103,19 @@ export function MessagesPage() {
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
 
+    const handleMessageCreated = (storedMessage: StoredMessage) => {
+      // Use the database ID to ignore a duplicate received through the event acknowledgement.
+      setConversations((currentConversations) => currentConversations.map((conversation) => (
+        conversation.id === storedMessage.conversationId
+          ? mergeConversationMessages(conversation, [toMessage(storedMessage)])
+          : conversation
+      )))
+    }
+
+    socket.on('message_created', handleMessageCreated)
+
     return () => {
+      socket.off('message_created', handleMessageCreated)
       socket.disconnect()
       socketRef.current = null
     }
@@ -79,6 +129,31 @@ export function MessagesPage() {
       if (!response.ok) console.error(response.message ?? 'Unable to join the conversation room.')
     })
   }, [activeConversationId])
+
+  useEffect(() => {
+    if (!activeConversationId) return
+
+    let isCurrentConversation = true
+
+    getConversationMessages(currentUserId, activeConversationId)
+      .then((storedMessages) => {
+        if (!isCurrentConversation) return
+
+        // Merge rather than replace so a real-time message arriving during the request is retained.
+        setConversations((currentConversations) => currentConversations.map((conversation) => (
+          conversation.id === activeConversationId
+            ? mergeConversationMessages(conversation, storedMessages.map(toMessage))
+            : conversation
+        )))
+      })
+      .catch((error: unknown) => {
+        if (isCurrentConversation) console.error('Unable to load conversation messages.', error)
+      })
+
+    return () => {
+      isCurrentConversation = false
+    }
+  }, [activeConversationId, currentUserId])
 
   useEffect(() => {
     let isCurrentAccount = true
@@ -115,8 +190,26 @@ export function MessagesPage() {
   }
 
   function sendMessage(content: string) {
-    const now = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date())
-    updateActiveConversation((conversation) => ({ ...conversation, lastMessage: content, lastMessageTime: now, messages: [...conversation.messages, { id: crypto.randomUUID(), senderId: currentUserId, content, sentAt: now, reactions: [] }] }))
+    if (!activeConversationId || !socketRef.current) return
+
+    socketRef.current.emit(
+      'send_message',
+      { conversationId: activeConversationId, content },
+      (response: { ok: boolean; error?: string; message?: StoredMessage }) => {
+        const storedMessage = response.message
+        if (!response.ok || !storedMessage) {
+          console.error(response.error ?? 'Unable to send the message.')
+          return
+        }
+
+        // The acknowledgement covers the short interval before this client finishes joining the room.
+        setConversations((currentConversations) => currentConversations.map((conversation) => (
+          conversation.id === storedMessage.conversationId
+            ? mergeConversationMessages(conversation, [toMessage(storedMessage)])
+            : conversation
+        )))
+      },
+    )
   }
 
   function editMessage(messageId: string, content: string) {

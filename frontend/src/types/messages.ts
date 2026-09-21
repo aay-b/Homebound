@@ -10,6 +10,7 @@ export type Message = {
   id: string
   senderId: string
   content: string
+  createdAt: string
   sentAt: string
   edited?: boolean
   reactions: MessageReaction[]

@@ -45,16 +45,33 @@ export async function searchPeople(keyword: string, currentUserId: bigint): Prom
     take: 10,
   })
 
-  const pendingRequests = await prisma.messageRequest.findMany({
-    where: {
-      status: 'pending',
-      OR: [
-        { senderId: currentUserId, recipientId: { in: people.map((person) => person.id) } },
-        { senderId: { in: people.map((person) => person.id) }, recipientId: currentUserId },
-      ],
-    },
-    select: { senderId: true, recipientId: true },
-  })
+  const candidateIds = people.map((person) => person.id)
+  const [pendingRequests, existingConversations] = await Promise.all([
+    prisma.messageRequest.findMany({
+      where: {
+        status: 'pending',
+        OR: [
+          { senderId: currentUserId, recipientId: { in: candidateIds } },
+          { senderId: { in: candidateIds }, recipientId: currentUserId },
+        ],
+      },
+      select: { senderId: true, recipientId: true },
+    }),
+    prisma.conversation.findMany({
+      where: {
+        AND: [
+          { members: { some: { userId: currentUserId } } },
+          { members: { some: { userId: { in: candidateIds } } } },
+        ],
+      },
+      select: {
+        members: {
+          where: { userId: { in: candidateIds } },
+          select: { userId: true },
+        },
+      },
+    }),
+  ])
   const pendingRecipientIds = new Set(
     pendingRequests
       .filter((request) => request.senderId === currentUserId)
@@ -66,10 +83,13 @@ export async function searchPeople(keyword: string, currentUserId: bigint): Prom
       .filter((request) => request.recipientId === currentUserId)
       .map((request) => request.senderId.toString()),
   )
+  const conversationParticipantIds = new Set(
+    existingConversations.flatMap((conversation) => conversation.members.map((member) => member.userId.toString())),
+  )
 
   return {
     status: 'success',
-    people: people.filter((person) => !incomingSenderIds.has(person.id.toString())).map((person) => ({
+    people: people.filter((person) => !incomingSenderIds.has(person.id.toString()) && !conversationParticipantIds.has(person.id.toString())).map((person) => ({
       id: person.id.toString(),
       name: person.name,
       role: person.role as 'user' | 'shelter_staff',

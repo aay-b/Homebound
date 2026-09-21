@@ -1,32 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
+import { getConversations, type ConversationPreview } from '@/services/conversations'
+import { getIncomingMessageRequests, respondToMessageRequest, type IncomingMessageRequest } from '@/services/messageRequests'
 import type { Conversation, MessageRequest } from '@/types/messages'
-
-// These temporary accounts mirror the database seed until authentication is available.
-const demoAccounts = [
-  { id: '1', name: 'Mia Carter', role: 'User' },
-  { id: '2', name: 'Noah Bennett', role: 'User' },
-  { id: '3', name: 'Olivia Brooks', role: 'User' },
-  { id: '4', name: 'Ethan Walker', role: 'User' },
-  { id: '5', name: 'Sophia Reed', role: 'User' },
-  { id: '6', name: 'Happy Paws Shelter', role: 'Shelter staff' },
-  { id: '7', name: 'City Animal Rescue', role: 'Shelter staff' },
-  { id: '8', name: 'Northside Shelter', role: 'Shelter staff' },
-  { id: '9', name: 'Safe Haven Rescue', role: 'Shelter staff' },
-  { id: '10', name: 'Paws and Hope', role: 'Shelter staff' },
-  { id: '11', name: 'Liam Foster', role: 'User' },
-  { id: '12', name: 'Ava Morgan', role: 'User' },
-  { id: '13', name: 'Lucas Turner', role: 'User' },
-  { id: '14', name: 'Isabella Hayes', role: 'User' },
-  { id: '15', name: 'Henry Collins', role: 'User' },
-  { id: '16', name: 'Second Chance Shelter', role: 'Shelter staff' },
-  { id: '17', name: 'Golden Tail Rescue', role: 'Shelter staff' },
-  { id: '18', name: 'Bright Future Shelter', role: 'Shelter staff' },
-  { id: '19', name: 'Kind Hearts Animal Care', role: 'Shelter staff' },
-  { id: '20', name: 'New Beginnings Rescue', role: 'Shelter staff' },
-]
 
 // Conversations start empty until the messaging API is connected.
 const initialConversations: Conversation[] = []
@@ -34,15 +12,63 @@ const initialConversations: Conversation[] = []
 // Requests start empty until the backend request endpoint is connected.
 const initialRequests: MessageRequest[] = []
 
+function getInitials(name: string) {
+  return name.split(' ').map((word) => word[0]).join('').slice(0, 2)
+}
+
+function toConversation(preview: ConversationPreview): Conversation {
+  return {
+    id: preview.id,
+    participantName: preview.participant.name,
+    participantInitials: getInitials(preview.participant.name),
+    participantRole: preview.participant.role === 'shelter_staff' ? 'shelterStaff' : 'user',
+    lastMessage: '',
+    lastMessageTime: '',
+    unreadCount: 0,
+    messages: [],
+  }
+}
+
+function toMessageRequest(request: IncomingMessageRequest): MessageRequest {
+  return {
+    id: request.id,
+    name: request.sender.name,
+    initials: getInitials(request.sender.name),
+    note: request.sender.role === 'shelter_staff' ? 'Shelter staff' : 'User',
+  }
+}
+
 export function MessagesPage() {
-  // The optional path segment selects the temporary account for local testing.
+  // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
-  const currentUser = demoAccounts.find((account) => account.id === demoUserId) ?? demoAccounts[0]
-  const currentUserId = currentUser.id
+  const currentUserId = demoUserId ?? '1'
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
+
+  useEffect(() => {
+    let isCurrentAccount = true
+
+    setActiveConversationId(null)
+
+    Promise.all([
+      getIncomingMessageRequests(currentUserId),
+      getConversations(currentUserId),
+    ])
+      .then(([requests, loadedConversations]) => {
+        if (!isCurrentAccount) return
+        setMessageRequests(requests.map(toMessageRequest))
+        setConversations(loadedConversations.map(toConversation))
+      })
+      .catch((error: unknown) => {
+        if (isCurrentAccount) console.error('Unable to load messaging data.', error)
+      })
+
+    return () => {
+      isCurrentAccount = false
+    }
+  }, [currentUserId])
 
   function updateActiveConversation(updateConversation: (conversation: Conversation) => Conversation) {
     // Centralize local conversation updates until message mutations use the API.
@@ -75,9 +101,19 @@ export function MessagesPage() {
     }) }))
   }
 
-  function handleRequestAction(requestId: string, action: 'accept' | 'decline') {
-    setMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
-    if (action === 'accept') console.info(`Accepted message request: ${requestId}`)
+  async function handleRequestAction(requestId: string, action: 'accept' | 'decline') {
+    try {
+      const result = await respondToMessageRequest(currentUserId, requestId, action)
+      setMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
+
+      if (result.status === 'accepted' && result.conversation) {
+        const conversation = toConversation(result.conversation)
+        setConversations((currentConversations) => [conversation, ...currentConversations])
+        setActiveConversationId(conversation.id)
+      }
+    } catch (error) {
+      console.error('Unable to respond to the message request.', error)
+    }
   }
 
   return (
@@ -91,7 +127,7 @@ export function MessagesPage() {
             <a className="transition hover:text-white" href="#applications">Applications</a>
             <a className="border-b-2 border-amber-300 pb-1 text-white" href="/messages">Messages</a>
           </nav>
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-sm font-bold ring-1 ring-white/20" aria-label={`Current demo account: ${currentUser.name}`}>{currentUser.name[0]}</span>
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-sm font-bold ring-1 ring-white/20" aria-label="Open profile">U</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_-25px_rgba(15,81,75,0.25)] lg:flex">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} />

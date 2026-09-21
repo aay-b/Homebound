@@ -1,37 +1,54 @@
 import { useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
 import type { Conversation, MessageRequest } from '@/types/messages'
 
-// This temporary identity will be replaced by the authenticated user ID.
-const currentUserId = 'current-user'
-
-// Conversations remain local until the messaging API is connected.
-const initialConversations: Conversation[] = [
-  {
-    id: 'happy-paws', participantName: 'Happy Paws Shelter', participantInitials: 'HP', participantRole: 'shelterStaff', lastMessage: 'Yes, Luna is still available!', lastMessageTime: '10:28 AM', unreadCount: 2,
-    messages: [
-      { id: 'm-1', senderId: currentUserId, content: 'Hi! Is Luna still available for adoption?', sentAt: '10:24 AM', reactions: [] },
-      { id: 'm-2', senderId: 'happy-paws', content: 'Yes! Luna is still available. She is gentle, playful, and ready to meet her forever family.', sentAt: '10:26 AM', reactions: [{ emoji: '❤️', count: 1, reactedByCurrentUser: true }] },
-      { id: 'm-3', senderId: currentUserId, content: 'That is wonderful. Could I schedule a visit this weekend?', sentAt: '10:28 AM', reactions: [] },
-    ],
-  },
-  { id: 'city-animal', participantName: 'City Animal Rescue', participantInitials: 'CA', participantRole: 'shelterStaff', lastMessage: 'We can help with that.', lastMessageTime: 'Yesterday', unreadCount: 0, messages: [{ id: 'm-4', senderId: 'city-animal', content: 'Hello! How can we help you today?', sentAt: 'Yesterday', reactions: [] }] },
-  { id: 'northside', participantName: 'Northside Shelter', participantInitials: 'NS', participantRole: 'shelterStaff', lastMessage: 'Thanks for reaching out!', lastMessageTime: 'Mon', unreadCount: 0, messages: [{ id: 'm-5', senderId: 'northside', content: 'Thanks for reaching out to Northside Shelter.', sentAt: 'Mon', reactions: [] }] },
+// These temporary accounts mirror the database seed until authentication is available.
+const demoAccounts = [
+  { id: '1', name: 'Mia Carter', role: 'User' },
+  { id: '2', name: 'Noah Bennett', role: 'User' },
+  { id: '3', name: 'Olivia Brooks', role: 'User' },
+  { id: '4', name: 'Ethan Walker', role: 'User' },
+  { id: '5', name: 'Sophia Reed', role: 'User' },
+  { id: '6', name: 'Happy Paws Shelter', role: 'Shelter staff' },
+  { id: '7', name: 'City Animal Rescue', role: 'Shelter staff' },
+  { id: '8', name: 'Northside Shelter', role: 'Shelter staff' },
+  { id: '9', name: 'Safe Haven Rescue', role: 'Shelter staff' },
+  { id: '10', name: 'Paws and Hope', role: 'Shelter staff' },
+  { id: '11', name: 'Liam Foster', role: 'User' },
+  { id: '12', name: 'Ava Morgan', role: 'User' },
+  { id: '13', name: 'Lucas Turner', role: 'User' },
+  { id: '14', name: 'Isabella Hayes', role: 'User' },
+  { id: '15', name: 'Henry Collins', role: 'User' },
+  { id: '16', name: 'Second Chance Shelter', role: 'Shelter staff' },
+  { id: '17', name: 'Golden Tail Rescue', role: 'Shelter staff' },
+  { id: '18', name: 'Bright Future Shelter', role: 'Shelter staff' },
+  { id: '19', name: 'Kind Hearts Animal Care', role: 'Shelter staff' },
+  { id: '20', name: 'New Beginnings Rescue', role: 'Shelter staff' },
 ]
+
+// Conversations start empty until the messaging API is connected.
+const initialConversations: Conversation[] = []
 
 // Requests start empty until the backend request endpoint is connected.
 const initialRequests: MessageRequest[] = []
 
 export function MessagesPage() {
+  // The optional path segment selects the temporary account for local testing.
+  const { demoUserId } = useParams<{ demoUserId: string }>()
+  const currentUser = demoAccounts.find((account) => account.id === demoUserId) ?? demoAccounts[0]
+  const currentUserId = currentUser.id
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
-  const [activeConversationId, setActiveConversationId] = useState(initialConversations[0].id)
-  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0]
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
 
   function updateActiveConversation(updateConversation: (conversation: Conversation) => Conversation) {
     // Centralize local conversation updates until message mutations use the API.
-    setConversations((currentConversations) => currentConversations.map((conversation) => conversation.id === activeConversationId ? updateConversation(conversation) : conversation))
+    setConversations((currentConversations) => activeConversationId
+      ? currentConversations.map((conversation) => conversation.id === activeConversationId ? updateConversation(conversation) : conversation)
+      : currentConversations)
   }
 
   function sendMessage(content: string) {
@@ -74,10 +91,10 @@ export function MessagesPage() {
             <a className="transition hover:text-white" href="#applications">Applications</a>
             <a className="border-b-2 border-amber-300 pb-1 text-white" href="/messages">Messages</a>
           </nav>
-          <button className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-sm font-bold ring-1 ring-white/20" aria-label="Open profile">U</button>
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-sm font-bold ring-1 ring-white/20" aria-label={`Current demo account: ${currentUser.name}`}>{currentUser.name[0]}</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_-25px_rgba(15,81,75,0.25)] lg:flex">
-          <ConversationSidebar conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
         </div>
       </div>

@@ -4,7 +4,7 @@ import { env } from '@/config/env.js'
 import { usersRouter } from '@/modules/users/users.router.js'
 
 export const app = express()
-app.use(cors({ origin: env.clientOrigin }))
+app.use(cors({ origin: env.clientOrigins }))
 app.use(express.json())
 app.get('/api/health', (_request, response) => response.json({ status: 'ok' }))
 // User endpoints are grouped under one API prefix for future modules.

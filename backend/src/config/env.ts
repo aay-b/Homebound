@@ -9,7 +9,8 @@ function required(name: string): string {
 
 export const env = {
   port: Number(process.env.PORT ?? 3000),
-  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+  // Vite may use 5174 when another frontend instance already uses 5173.
+  clientOrigins: [process.env.CLIENT_ORIGIN ?? 'http://localhost:5173', 'http://localhost:5174'],
   databaseUrl: required('SUPABASE_DB_URL'),
 }
 

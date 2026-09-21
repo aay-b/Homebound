@@ -32,3 +32,9 @@ export type MessageRequest = {
   initials: string
   note: string
 }
+
+export type SearchPerson = {
+  id: string
+  name: string
+  role: 'user' | 'shelter_staff'
+}

@@ -15,6 +15,7 @@ export function App() {
           }
         />
         <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/messages/:demoUserId" element={<MessagesPage />} />
       </Routes>
     </BrowserRouter>
   )

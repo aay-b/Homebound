@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import type { Conversation, Message } from '@/types/messages'
 
 type ChatWindowProps = {
-  conversation: Conversation
+  conversation?: Conversation
   currentUserId: string
   onSendMessage: (content: string) => void
   onEditMessage: (messageId: string, content: string) => void
@@ -17,6 +17,14 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [draft, setDraft] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
+
+  if (!conversation) {
+    return (
+      <section className="grid min-h-[640px] flex-1 place-items-center bg-[#fcfdfd] p-6 text-center">
+        <p className="text-sm text-slate-500">Search for someone to start a conversation.</p>
+      </section>
+    )
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

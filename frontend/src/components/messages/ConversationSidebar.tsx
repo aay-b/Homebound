@@ -1,28 +1,90 @@
-import type { Conversation, MessageRequest } from '@/types/messages'
+import { useEffect, useState } from 'react'
+import { searchPeople } from '@/services/users'
+import type { Conversation, MessageRequest, SearchPerson } from '@/types/messages'
 
 type ConversationSidebarProps = {
+  currentUserId: string
   conversations: Conversation[]
-  activeConversationId: string
+  activeConversationId: string | null
   messageRequests: MessageRequest[]
   onConversationSelect: (conversationId: string) => void
   onRequestAction: (requestId: string, action: 'accept' | 'decline') => void
 }
 
 export function ConversationSidebar({
+  currentUserId,
   conversations,
   activeConversationId,
   messageRequests,
   onConversationSelect,
   onRequestAction,
 }: ConversationSidebarProps) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+
+    if (!query) {
+      setSearchResults([])
+      setSearchError('')
+      setIsSearching(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      setIsSearching(true)
+      setSearchError('')
+
+      searchPeople(query, currentUserId, controller.signal)
+        .then(setSearchResults)
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return
+          setSearchResults([])
+          setSearchError(error instanceof Error ? error.message : 'Unable to search people.')
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsSearching(false)
+        })
+    }, 300)
+
+    // Cancel stale requests when the keyword or current user changes.
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [currentUserId, searchQuery])
+
   return (
     <aside className="w-full border-b border-slate-200 bg-white lg:w-[320px] lg:border-b-0 lg:border-r">
       <div className="border-b border-slate-100 px-5 py-4">
-        {/* Results will be loaded from the user search API during the next frontend step. */}
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 focus-within:border-teal-500 focus-within:bg-white">
           <span aria-hidden="true">⌕</span>
-          <input className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400" placeholder="Search people" />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400" placeholder="Search people" />
         </label>
+        {searchQuery.trim() && (
+          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+            {isSearching && <p className="px-2 py-1 text-xs text-slate-500">Searching...</p>}
+            {searchError && <p className="px-2 py-1 text-xs text-rose-600">{searchError}</p>}
+            {!isSearching && !searchError && searchResults.length === 0 && <p className="px-2 py-1 text-xs text-slate-500">No matching people found.</p>}
+            {!isSearching && !searchError && searchResults.length > 0 && (
+              <ul className="space-y-1" aria-label="People matching your search">
+                {searchResults.map((person) => (
+                  <li key={person.id} className="flex items-center gap-2 rounded-lg px-2 py-2">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-50 text-xs font-bold text-teal-700">{person.name.split(' ').map((name) => name[0]).join('').slice(0, 2)}</div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">{person.name}</p>
+                      <p className="text-xs text-slate-500">{person.role === 'shelter_staff' ? 'Shelter staff' : 'User'}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {messageRequests.length > 0 && (
@@ -54,6 +116,7 @@ export function ConversationSidebar({
       <section className="px-4 py-4">
         <h2 className="mb-3 px-1 text-sm font-bold text-slate-800">Conversations</h2>
         <div className="space-y-1.5">
+          {conversations.length === 0 && <p className="px-1 py-2 text-sm text-slate-500">No conversations yet.</p>}
           {conversations.map((conversation) => {
             const isActive = conversation.id === activeConversationId
             return (

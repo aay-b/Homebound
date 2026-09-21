@@ -24,6 +24,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // Send remains clickable by design; blank drafts simply do not create a message.
     if (!draft.trim()) return
     onSendMessage(draft.trim())
     setDraft('')

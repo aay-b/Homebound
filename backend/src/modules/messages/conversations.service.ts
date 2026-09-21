@@ -31,6 +31,7 @@ export async function getConversations(currentUserId: bigint): Promise<Conversat
   return {
     status: 'success',
     conversations: conversations.flatMap((conversation) => {
+      // Conversations are currently private two-person threads, so the other member is the preview participant.
       const participant = conversation.members.find((member) => member.userId !== currentUserId)?.user
       if (!participant) return []
 

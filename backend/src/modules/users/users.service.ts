@@ -46,6 +46,7 @@ export async function searchPeople(keyword: string, currentUserId: bigint): Prom
   })
 
   const candidateIds = people.map((person) => person.id)
+  // Fetch both directions of pending requests and existing conversations in one round trip group.
   const [pendingRequests, existingConversations] = await Promise.all([
     prisma.messageRequest.findMany({
       where: {
@@ -77,6 +78,8 @@ export async function searchPeople(keyword: string, currentUserId: bigint): Prom
       .filter((request) => request.senderId === currentUserId)
       .map((request) => request.recipientId.toString()),
   )
+
+  // Keep outgoing requests searchable so the UI can show "Request sent" after a refresh.
   // Hide people who already sent the current user a pending request.
   const incomingSenderIds = new Set(
     pendingRequests

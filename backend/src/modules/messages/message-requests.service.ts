@@ -42,6 +42,7 @@ type RespondToMessageRequestResult =
     }
 
 export async function createMessageRequest(senderId: bigint, recipientId: bigint): Promise<CreateMessageRequestResult> {
+  // Verify both accounts before evaluating the role-based messaging rule.
   const [sender, recipient] = await Promise.all([
     prisma.user.findUnique({ where: { id: senderId }, select: { role: true } }),
     prisma.user.findUnique({ where: { id: recipientId }, select: { role: true } }),
@@ -62,6 +63,7 @@ export async function createMessageRequest(senderId: bigint, recipientId: bigint
 
   if (existingRequest) return { status: 'already_pending' }
 
+  // The database partial unique index also protects this rule during concurrent requests.
   const request = await prisma.messageRequest.create({
     data: { senderId, recipientId },
     select: { id: true },
@@ -75,6 +77,7 @@ export async function getIncomingMessageRequests(recipientId: bigint): Promise<I
   if (!recipient) return { status: 'not_found', requests: [] }
 
   const requests = await prisma.messageRequest.findMany({
+    // Only unresolved requests are actionable in the recipient's inbox.
     where: { recipientId, status: 'pending' },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -101,6 +104,7 @@ export async function getOutgoingMessageRequests(senderId: bigint): Promise<Outg
   if (!sender) return { status: 'not_found', requests: [] }
 
   const requests = await prisma.messageRequest.findMany({
+    // Sent requests remain visible only while the recipient can still respond.
     where: { senderId, status: 'pending' },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -130,6 +134,7 @@ export async function cancelMessageRequest(requestId: bigint, senderId: bigint):
 
   if (!request) return { status: 'not_found' }
 
+  // Cancellation removes a pending request instead of retaining a cancelled status.
   await prisma.messageRequest.delete({
     where: { id: request.id },
   })
@@ -142,6 +147,7 @@ export async function respondToMessageRequest(
   recipientId: bigint,
   action: 'accept' | 'decline',
 ): Promise<RespondToMessageRequestResult> {
+  // Read, respond, and create the conversation in one transaction to avoid partial acceptance.
   return prisma.$transaction(async (transaction) => {
     const request = await transaction.messageRequest.findFirst({
       where: { id: requestId, recipientId, status: 'pending' },

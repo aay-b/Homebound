@@ -35,6 +35,7 @@ export function ConversationSidebar({
   const [sentRecipientIds, setSentRecipientIds] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
+    // This set only covers requests sent during the current page session.
     setRequestError('')
     setSentRecipientIds(new Set())
   }, [currentUserId])
@@ -79,6 +80,7 @@ export function ConversationSidebar({
 
     try {
       const requestId = await sendMessageRequest(currentUserId, person.id)
+      // The API result is persisted; keep local search and the sent-request list in sync immediately.
       setSentRecipientIds((currentIds) => new Set([...currentIds, person.id]))
       onOutgoingRequestCreated({
         id: requestId,

@@ -61,6 +61,7 @@ export function MessagesPage() {
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
 
   useEffect(() => {
+    // Reconnect whenever the URL switches the temporary demo account.
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
 
@@ -73,6 +74,7 @@ export function MessagesPage() {
   useEffect(() => {
     if (!activeConversationId) return
 
+    // Join only the selected thread so later real-time events can be scoped to its members.
     socketRef.current?.emit('join_conversation', activeConversationId, (response: { ok: boolean; message?: string }) => {
       if (!response.ok) console.error(response.message ?? 'Unable to join the conversation room.')
     })
@@ -81,6 +83,7 @@ export function MessagesPage() {
   useEffect(() => {
     let isCurrentAccount = true
 
+    // Clear the previous account's selected thread before loading its messaging data.
     setActiveConversationId(null)
 
     Promise.all([
@@ -99,6 +102,7 @@ export function MessagesPage() {
       })
 
     return () => {
+      // Ignore slow responses that belong to an account selected before the URL changed.
       isCurrentAccount = false
     }
   }, [currentUserId])
@@ -159,6 +163,7 @@ export function MessagesPage() {
   }
 
   function handleOutgoingRequestCreated(request: MessageRequest) {
+    // Show a newly sent request immediately; a page reload still restores it from the API.
     setOutgoingMessageRequests((requests) => [request, ...requests])
   }
 

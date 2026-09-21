@@ -8,8 +8,11 @@ type ConversationSidebarProps = {
   conversations: Conversation[]
   activeConversationId: string | null
   messageRequests: MessageRequest[]
+  outgoingMessageRequests: MessageRequest[]
   onConversationSelect: (conversationId: string) => void
   onRequestAction: (requestId: string, action: 'accept' | 'decline') => void
+  onCancelOutgoingRequest: (requestId: string) => void
+  onOutgoingRequestCreated: (request: MessageRequest) => void
 }
 
 export function ConversationSidebar({
@@ -17,8 +20,11 @@ export function ConversationSidebar({
   conversations,
   activeConversationId,
   messageRequests,
+  outgoingMessageRequests,
   onConversationSelect,
   onRequestAction,
+  onCancelOutgoingRequest,
+  onOutgoingRequestCreated,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
@@ -67,13 +73,19 @@ export function ConversationSidebar({
     }
   }, [currentUserId, searchQuery])
 
-  async function handleSendRequest(recipientId: string) {
-    setRequestingRecipientId(recipientId)
+  async function handleSendRequest(person: SearchPerson) {
+    setRequestingRecipientId(person.id)
     setRequestError('')
 
     try {
-      await sendMessageRequest(currentUserId, recipientId)
-      setSentRecipientIds((currentIds) => new Set([...currentIds, recipientId]))
+      const requestId = await sendMessageRequest(currentUserId, person.id)
+      setSentRecipientIds((currentIds) => new Set([...currentIds, person.id]))
+      onOutgoingRequestCreated({
+        id: requestId,
+        name: person.name,
+        initials: person.name.split(' ').map((name) => name[0]).join('').slice(0, 2),
+        note: person.role === 'shelter_staff' ? 'Shelter staff' : 'User',
+      })
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : 'Unable to send the message request.')
     } finally {
@@ -106,7 +118,7 @@ export function ConversationSidebar({
                         <p className="truncate text-sm font-semibold text-slate-800">{person.name}</p>
                         <p className="text-xs text-slate-500">{person.role === 'shelter_staff' ? 'Shelter staff' : 'User'}</p>
                       </div>
-                      <button type="button" onClick={() => handleSendRequest(person.id)} disabled={requestingRecipientId === person.id || hasPendingRequest} className="shrink-0 rounded-md bg-teal-700 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                      <button type="button" onClick={() => handleSendRequest(person)} disabled={requestingRecipientId === person.id || hasPendingRequest} className="shrink-0 rounded-md bg-teal-700 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">
                         {requestingRecipientId === person.id ? 'Sending...' : hasPendingRequest ? 'Request sent' : 'Send request'}
                       </button>
                     </li>
@@ -121,7 +133,7 @@ export function ConversationSidebar({
       {messageRequests.length > 0 && (
         <section className="border-b border-slate-100 px-4 py-4">
           <div className="mb-3 flex items-center justify-between px-1">
-            <h2 className="text-sm font-bold text-slate-800">Message requests</h2>
+            <h2 className="text-sm font-bold text-slate-800">Received requests</h2>
             <span className="grid h-5 min-w-5 place-items-center rounded-full bg-coral-500 px-1 text-xs font-bold text-white">{messageRequests.length}</span>
           </div>
           <div className="space-y-2">
@@ -137,6 +149,26 @@ export function ConversationSidebar({
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button onClick={() => onRequestAction(request.id, 'accept')} className="rounded-lg bg-teal-700 px-2 py-2 text-xs font-bold text-white transition hover:bg-teal-800">Accept</button>
                   <button onClick={() => onRequestAction(request.id, 'decline')} className="rounded-lg bg-rose-50 px-2 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-100">Decline</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {outgoingMessageRequests.length > 0 && (
+        <section className="border-b border-slate-100 px-4 py-4">
+          <h2 className="mb-3 px-1 text-sm font-bold text-slate-800">Requests you&apos;ve sent</h2>
+          <div className="space-y-2">
+            {outgoingMessageRequests.map((request) => (
+              <div key={request.id} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-teal-50 text-xs font-bold text-teal-700">{request.initials}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-800">{request.name}</p>
+                    <p className="truncate text-xs text-slate-500">Pending · {request.note}</p>
+                  </div>
+                  <button type="button" onClick={() => onCancelOutgoingRequest(request.id)} className="rounded-lg bg-rose-50 px-2 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-100">Cancel</button>
                 </div>
               </div>
             ))}

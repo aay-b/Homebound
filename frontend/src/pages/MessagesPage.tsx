@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import type { Socket } from 'socket.io-client'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
-import { getIncomingMessageRequests, respondToMessageRequest, type IncomingMessageRequest } from '@/services/messageRequests'
+import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest, type IncomingMessageRequest, type OutgoingMessageRequest } from '@/services/messageRequests'
+import { connectMessagingSocket } from '@/services/socket'
 import type { Conversation, MessageRequest } from '@/types/messages'
 
 // Conversations start empty until the messaging API is connected.
@@ -38,14 +40,43 @@ function toMessageRequest(request: IncomingMessageRequest): MessageRequest {
   }
 }
 
+function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageRequest {
+  return {
+    id: request.id,
+    name: request.recipient.name,
+    initials: getInitials(request.recipient.name),
+    note: request.recipient.role === 'shelter_staff' ? 'Shelter staff' : 'User',
+  }
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
   const currentUserId = demoUserId ?? '1'
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
+  const [outgoingMessageRequests, setOutgoingMessageRequests] = useState(initialRequests)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const socketRef = useRef<Socket | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
+
+  useEffect(() => {
+    const socket = connectMessagingSocket(currentUserId)
+    socketRef.current = socket
+
+    return () => {
+      socket.disconnect()
+      socketRef.current = null
+    }
+  }, [currentUserId])
+
+  useEffect(() => {
+    if (!activeConversationId) return
+
+    socketRef.current?.emit('join_conversation', activeConversationId, (response: { ok: boolean; message?: string }) => {
+      if (!response.ok) console.error(response.message ?? 'Unable to join the conversation room.')
+    })
+  }, [activeConversationId])
 
   useEffect(() => {
     let isCurrentAccount = true
@@ -54,11 +85,13 @@ export function MessagesPage() {
 
     Promise.all([
       getIncomingMessageRequests(currentUserId),
+      getOutgoingMessageRequests(currentUserId),
       getConversations(currentUserId),
     ])
-      .then(([requests, loadedConversations]) => {
+      .then(([requests, outgoingRequests, loadedConversations]) => {
         if (!isCurrentAccount) return
         setMessageRequests(requests.map(toMessageRequest))
+        setOutgoingMessageRequests(outgoingRequests.map(toOutgoingMessageRequest))
         setConversations(loadedConversations.map(toConversation))
       })
       .catch((error: unknown) => {
@@ -116,6 +149,19 @@ export function MessagesPage() {
     }
   }
 
+  async function handleCancelOutgoingRequest(requestId: string) {
+    try {
+      await cancelOutgoingMessageRequest(currentUserId, requestId)
+      setOutgoingMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
+    } catch (error) {
+      console.error('Unable to cancel the outgoing message request.', error)
+    }
+  }
+
+  function handleOutgoingRequestCreated(request: MessageRequest) {
+    setOutgoingMessageRequests((requests) => [request, ...requests])
+  }
+
   return (
     <main className="min-h-screen bg-[#f4f8f7] px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
       <div className="mx-auto max-w-6xl">
@@ -130,7 +176,7 @@ export function MessagesPage() {
           <span className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-sm font-bold ring-1 ring-white/20" aria-label="Open profile">U</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_-25px_rgba(15,81,75,0.25)] lg:flex">
-          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
         </div>
       </div>

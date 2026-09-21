@@ -19,11 +19,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [editingContent, setEditingContent] = useState('')
 
   if (!conversation) {
-    return (
-      <section className="grid min-h-[640px] flex-1 place-items-center bg-[#fcfdfd] p-6 text-center">
-        <p className="text-sm text-slate-500">Search for someone to start a conversation.</p>
-      </section>
-    )
+    return <section className="min-h-[640px] flex-1 bg-[#fcfdfd]" />
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -98,7 +94,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       <form onSubmit={handleSubmit} className="border-t border-slate-100 bg-white p-4 sm:px-7 sm:py-5">
         <div className="flex items-end gap-3">
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} rows={1} className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-50" placeholder="Write a message..." />
-          <button type="submit" disabled={!draft.trim()} className="h-11 rounded-xl bg-teal-700 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-200">Send</button>
+          <button type="submit" className="h-11 rounded-xl bg-teal-700 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800">Send</button>
         </div>
       </form>
     </section>

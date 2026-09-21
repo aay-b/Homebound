@@ -16,6 +16,20 @@ type IncomingMessageRequestsResult =
       }>
     }
 
+type OutgoingMessageRequestsResult =
+  | { status: 'not_found'; requests: [] }
+  | {
+      status: 'success'
+      requests: Array<{
+        id: string
+        recipient: { id: string; name: string; role: 'user' | 'shelter_staff' }
+      }>
+    }
+
+type CancelMessageRequestResult =
+  | { status: 'not_found' }
+  | { status: 'cancelled' }
+
 type RespondToMessageRequestResult =
   | { status: 'not_found' }
   | { status: 'declined' }
@@ -80,6 +94,47 @@ export async function getIncomingMessageRequests(recipientId: bigint): Promise<I
       },
     })),
   }
+}
+
+export async function getOutgoingMessageRequests(senderId: bigint): Promise<OutgoingMessageRequestsResult> {
+  const sender = await prisma.user.findUnique({ where: { id: senderId }, select: { id: true } })
+  if (!sender) return { status: 'not_found', requests: [] }
+
+  const requests = await prisma.messageRequest.findMany({
+    where: { senderId, status: 'pending' },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      recipient: { select: { id: true, name: true, role: true } },
+    },
+  })
+
+  return {
+    status: 'success',
+    requests: requests.map((request) => ({
+      id: request.id.toString(),
+      recipient: {
+        id: request.recipient.id.toString(),
+        name: request.recipient.name,
+        role: request.recipient.role as 'user' | 'shelter_staff',
+      },
+    })),
+  }
+}
+
+export async function cancelMessageRequest(requestId: bigint, senderId: bigint): Promise<CancelMessageRequestResult> {
+  const request = await prisma.messageRequest.findFirst({
+    where: { id: requestId, senderId, status: 'pending' },
+    select: { id: true },
+  })
+
+  if (!request) return { status: 'not_found' }
+
+  await prisma.messageRequest.delete({
+    where: { id: request.id },
+  })
+
+  return { status: 'cancelled' }
 }
 
 export async function respondToMessageRequest(

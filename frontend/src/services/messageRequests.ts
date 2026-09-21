@@ -8,8 +8,18 @@ export type IncomingMessageRequest = {
   sender: { id: string; name: string; role: 'user' | 'shelter_staff' }
 }
 
+export type OutgoingMessageRequest = {
+  id: string
+  recipient: { id: string; name: string; role: 'user' | 'shelter_staff' }
+}
+
 type IncomingMessageRequestsResponse = {
   requests?: IncomingMessageRequest[]
+  message?: string
+}
+
+type OutgoingMessageRequestsResponse = {
+  requests?: OutgoingMessageRequest[]
   message?: string
 }
 
@@ -48,6 +58,27 @@ export async function getIncomingMessageRequests(currentUserId: string): Promise
   if (!response.ok) throw new Error(payload.message ?? 'Unable to load message requests.')
 
   return payload.requests ?? []
+}
+
+export async function getOutgoingMessageRequests(currentUserId: string): Promise<OutgoingMessageRequest[]> {
+  const searchParams = new URLSearchParams({ currentUserId })
+  const response = await fetch(`${apiBaseUrl}/message-requests/outgoing?${searchParams}`)
+  const payload = await response.json() as OutgoingMessageRequestsResponse
+
+  if (!response.ok) throw new Error(payload.message ?? 'Unable to load outgoing message requests.')
+
+  return payload.requests ?? []
+}
+
+export async function cancelOutgoingMessageRequest(currentUserId: string, requestId: string) {
+  const response = await fetch(`${apiBaseUrl}/message-requests/${requestId}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentUserId }),
+  })
+  const payload = await response.json() as { message?: string }
+
+  if (!response.ok) throw new Error(payload.message ?? 'Unable to cancel the message request.')
 }
 
 export async function respondToMessageRequest(

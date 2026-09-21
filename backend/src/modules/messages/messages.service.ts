@@ -14,6 +14,27 @@ type CreateMessageResult =
   | { status: 'not_a_member' }
   | { status: 'created'; message: StoredMessage }
 
+type ConversationMessagesResult =
+  | { status: 'not_found'; messages: [] }
+  | { status: 'not_a_member'; messages: [] }
+  | { status: 'success'; messages: StoredMessage[] }
+
+function toStoredMessage(message: {
+  id: bigint
+  conversationId: bigint
+  senderId: bigint
+  content: string
+  createdAt: Date
+}): StoredMessage {
+  return {
+    id: message.id.toString(),
+    conversationId: message.conversationId.toString(),
+    senderId: message.senderId.toString(),
+    content: message.content,
+    createdAt: message.createdAt.toISOString(),
+  }
+}
+
 export async function createMessage(
   conversationId: bigint,
   senderId: bigint,
@@ -54,12 +75,38 @@ export async function createMessage(
 
   return {
     status: 'created',
-    message: {
-      id: message.id.toString(),
-      conversationId: message.conversationId.toString(),
-      senderId: message.senderId.toString(),
-      content: message.content,
-      createdAt: message.createdAt.toISOString(),
-    },
+    message: toStoredMessage(message),
   }
+}
+
+export async function getConversationMessages(
+  conversationId: bigint,
+  currentUserId: bigint,
+): Promise<ConversationMessagesResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { id: true },
+  })
+  if (!conversation) return { status: 'not_found', messages: [] }
+
+  const membership = await prisma.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId, userId: currentUserId } },
+    select: { conversationId: true },
+  })
+  if (!membership) return { status: 'not_a_member', messages: [] }
+
+  const messages = await prisma.message.findMany({
+    where: { conversationId, deletedAt: null },
+    // A secondary ID sort makes message order stable when timestamps are identical.
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      conversationId: true,
+      senderId: true,
+      content: true,
+      createdAt: true,
+    },
+  })
+
+  return { status: 'success', messages: messages.map(toStoredMessage) }
 }

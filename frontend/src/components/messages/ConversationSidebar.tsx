@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sendMessageRequest } from '@/services/messageRequests'
 import { searchPeople } from '@/services/users'
 import type { Conversation, MessageRequest, SearchPerson } from '@/types/messages'
 
@@ -23,6 +24,14 @@ export function ConversationSidebar({
   const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [requestError, setRequestError] = useState('')
+  const [requestingRecipientId, setRequestingRecipientId] = useState<string | null>(null)
+  const [sentRecipientIds, setSentRecipientIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    setRequestError('')
+    setSentRecipientIds(new Set())
+  }, [currentUserId])
 
   useEffect(() => {
     const query = searchQuery.trim()
@@ -58,6 +67,20 @@ export function ConversationSidebar({
     }
   }, [currentUserId, searchQuery])
 
+  async function handleSendRequest(recipientId: string) {
+    setRequestingRecipientId(recipientId)
+    setRequestError('')
+
+    try {
+      await sendMessageRequest(currentUserId, recipientId)
+      setSentRecipientIds((currentIds) => new Set([...currentIds, recipientId]))
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Unable to send the message request.')
+    } finally {
+      setRequestingRecipientId(null)
+    }
+  }
+
   return (
     <aside className="w-full border-b border-slate-200 bg-white lg:w-[320px] lg:border-b-0 lg:border-r">
       <div className="border-b border-slate-100 px-5 py-4">
@@ -69,18 +92,26 @@ export function ConversationSidebar({
           <div className="mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
             {isSearching && <p className="px-2 py-1 text-xs text-slate-500">Searching...</p>}
             {searchError && <p className="px-2 py-1 text-xs text-rose-600">{searchError}</p>}
+            {requestError && <p className="px-2 py-1 text-xs text-rose-600">{requestError}</p>}
             {!isSearching && !searchError && searchResults.length === 0 && <p className="px-2 py-1 text-xs text-slate-500">No matching people found.</p>}
             {!isSearching && !searchError && searchResults.length > 0 && (
               <ul className="space-y-1" aria-label="People matching your search">
-                {searchResults.map((person) => (
-                  <li key={person.id} className="flex items-center gap-2 rounded-lg px-2 py-2">
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-50 text-xs font-bold text-teal-700">{person.name.split(' ').map((name) => name[0]).join('').slice(0, 2)}</div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-800">{person.name}</p>
-                      <p className="text-xs text-slate-500">{person.role === 'shelter_staff' ? 'Shelter staff' : 'User'}</p>
-                    </div>
-                  </li>
-                ))}
+                {searchResults.map((person) => {
+                  const hasPendingRequest = person.hasPendingRequest || sentRecipientIds.has(person.id)
+
+                  return (
+                    <li key={person.id} className="flex items-center gap-2 rounded-lg px-2 py-2">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-50 text-xs font-bold text-teal-700">{person.name.split(' ').map((name) => name[0]).join('').slice(0, 2)}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">{person.name}</p>
+                        <p className="text-xs text-slate-500">{person.role === 'shelter_staff' ? 'Shelter staff' : 'User'}</p>
+                      </div>
+                      <button type="button" onClick={() => handleSendRequest(person.id)} disabled={requestingRecipientId === person.id || hasPendingRequest} className="shrink-0 rounded-md bg-teal-700 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">
+                        {requestingRecipientId === person.id ? 'Sending...' : hasPendingRequest ? 'Request sent' : 'Send request'}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

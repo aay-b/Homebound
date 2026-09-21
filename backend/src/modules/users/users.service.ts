@@ -9,6 +9,7 @@ type SearchPeopleResult =
         id: string
         name: string
         role: 'user' | 'shelter_staff'
+        hasPendingRequest: boolean
       }>
     }
 
@@ -44,12 +45,35 @@ export async function searchPeople(keyword: string, currentUserId: bigint): Prom
     take: 10,
   })
 
+  const pendingRequests = await prisma.messageRequest.findMany({
+    where: {
+      status: 'pending',
+      OR: [
+        { senderId: currentUserId, recipientId: { in: people.map((person) => person.id) } },
+        { senderId: { in: people.map((person) => person.id) }, recipientId: currentUserId },
+      ],
+    },
+    select: { senderId: true, recipientId: true },
+  })
+  const pendingRecipientIds = new Set(
+    pendingRequests
+      .filter((request) => request.senderId === currentUserId)
+      .map((request) => request.recipientId.toString()),
+  )
+  // Hide people who already sent the current user a pending request.
+  const incomingSenderIds = new Set(
+    pendingRequests
+      .filter((request) => request.recipientId === currentUserId)
+      .map((request) => request.senderId.toString()),
+  )
+
   return {
     status: 'success',
-    people: people.map((person) => ({
+    people: people.filter((person) => !incomingSenderIds.has(person.id.toString())).map((person) => ({
       id: person.id.toString(),
       name: person.name,
       role: person.role as 'user' | 'shelter_staff',
+      hasPendingRequest: pendingRecipientIds.has(person.id.toString()),
     })),
   }
 }

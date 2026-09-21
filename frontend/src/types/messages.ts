@@ -37,4 +37,5 @@ export type SearchPerson = {
   id: string
   name: string
   role: 'user' | 'shelter_staff'
+  hasPendingRequest: boolean
 }

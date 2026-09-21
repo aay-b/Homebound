@@ -6,4 +6,5 @@ import { App } from '@/App'
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element "#root" was not found.')
 
+// StrictMode highlights unsafe patterns while developing the React application.
 createRoot(rootElement).render(<StrictMode><App /></StrictMode>)

@@ -10,6 +10,7 @@ type ChatWindowProps = {
   onToggleReaction: (messageId: string, emoji: string) => void
 }
 
+// These are the six reaction options available in the current messaging UI.
 const reactionOptions = ['👍', '❤️', '😂', '😮', '😢', '😡']
 
 export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditMessage, onDeleteMessage, onToggleReaction }: ChatWindowProps) {

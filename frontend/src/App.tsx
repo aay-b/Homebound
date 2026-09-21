@@ -4,6 +4,7 @@ import { MessagesPage } from '@/pages/MessagesPage'
 export function App() {
   return (
     <BrowserRouter>
+      {/* Add application pages here as their routes are implemented. */}
       <Routes>
         <Route
           path="/"

@@ -1,3 +1,4 @@
+/// Represents every account that can participate in messaging.
 model User {
   id                       BigInt               @id @default(autoincrement())
   name                     String

@@ -1,3 +1,4 @@
+// Generate the client outside source files and exclude it from version control.
 generator client {
   provider        = "prisma-client"
   output          = "../src/generated/prisma"

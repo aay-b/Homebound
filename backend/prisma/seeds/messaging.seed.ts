@@ -8,6 +8,7 @@ if (!connectionString) throw new Error('SUPABASE_DB_URL is missing.')
 const adapter = new PrismaPg({ connectionString })
 const prisma = new PrismaClient({ adapter })
 
+// Fixed IDs keep demo identities predictable while the team builds authentication.
 const demoUsers = [
   { id: 1, name: 'Mia Carter', email: 'mia.carter@gmail.com', role: 'user' },
   { id: 2, name: 'Noah Bennett', email: 'noah.bennett@gmail.com', role: 'user' },
@@ -41,6 +42,7 @@ async function main() {
     })
   }
 
+  // Keep future auto-incremented user IDs above the seeded records.
   await prisma.$executeRawUnsafe(
     "select setval(pg_get_serial_sequence('public.users', 'id'), (select max(id) from public.users))",
   )

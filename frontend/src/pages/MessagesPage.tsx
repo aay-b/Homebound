@@ -3,8 +3,10 @@ import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
 import type { Conversation, MessageRequest } from '@/types/messages'
 
+// This temporary identity will be replaced by the authenticated user ID.
 const currentUserId = 'current-user'
 
+// Conversations remain local until the messaging API is connected.
 const initialConversations: Conversation[] = [
   {
     id: 'happy-paws', participantName: 'Happy Paws Shelter', participantInitials: 'HP', participantRole: 'shelterStaff', lastMessage: 'Yes, Luna is still available!', lastMessageTime: '10:28 AM', unreadCount: 2,
@@ -18,10 +20,8 @@ const initialConversations: Conversation[] = [
   { id: 'northside', participantName: 'Northside Shelter', participantInitials: 'NS', participantRole: 'shelterStaff', lastMessage: 'Thanks for reaching out!', lastMessageTime: 'Mon', unreadCount: 0, messages: [{ id: 'm-5', senderId: 'northside', content: 'Thanks for reaching out to Northside Shelter.', sentAt: 'Mon', reactions: [] }] },
 ]
 
-const initialRequests: MessageRequest[] = [
-  { id: 'request-1', name: 'Sarah Miller', initials: 'SM', note: 'Interested in Milo' },
-  { id: 'request-2', name: 'Alex Johnson', initials: 'AJ', note: 'Question about Luna' },
-]
+// Requests start empty until the backend request endpoint is connected.
+const initialRequests: MessageRequest[] = []
 
 export function MessagesPage() {
   const [conversations, setConversations] = useState(initialConversations)
@@ -30,6 +30,7 @@ export function MessagesPage() {
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0]
 
   function updateActiveConversation(updateConversation: (conversation: Conversation) => Conversation) {
+    // Centralize local conversation updates until message mutations use the API.
     setConversations((currentConversations) => currentConversations.map((conversation) => conversation.id === activeConversationId ? updateConversation(conversation) : conversation))
   }
 

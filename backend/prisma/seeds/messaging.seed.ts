@@ -19,6 +19,16 @@ const demoUsers = [
   { id: 8, name: 'Northside Shelter', email: 'northsideshelter@gmail.com', role: 'shelter_staff' },
   { id: 9, name: 'Safe Haven Rescue', email: 'safehavenrescue@gmail.com', role: 'shelter_staff' },
   { id: 10, name: 'Paws and Hope', email: 'pawsandhope@gmail.com', role: 'shelter_staff' },
+  { id: 11, name: 'Liam Foster', email: 'liam.foster@gmail.com', role: 'user' },
+  { id: 12, name: 'Ava Morgan', email: 'ava.morgan@gmail.com', role: 'user' },
+  { id: 13, name: 'Lucas Turner', email: 'lucas.turner@gmail.com', role: 'user' },
+  { id: 14, name: 'Isabella Hayes', email: 'isabella.hayes@gmail.com', role: 'user' },
+  { id: 15, name: 'Henry Collins', email: 'henry.collins@gmail.com', role: 'user' },
+  { id: 16, name: 'Second Chance Shelter', email: 'secondchanceshelter@gmail.com', role: 'shelter_staff' },
+  { id: 17, name: 'Golden Tail Rescue', email: 'goldentailrescue@gmail.com', role: 'shelter_staff' },
+  { id: 18, name: 'Bright Future Shelter', email: 'brightfutureshelter@gmail.com', role: 'shelter_staff' },
+  { id: 19, name: 'Kind Hearts Animal Care', email: 'kindheartsanimalcare@gmail.com', role: 'shelter_staff' },
+  { id: 20, name: 'New Beginnings Rescue', email: 'newbeginningsrescue@gmail.com', role: 'shelter_staff' },
 ]
 
 async function main() {

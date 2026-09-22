@@ -87,6 +87,13 @@ function mergeConversationMessages(conversation: Conversation, incomingMessages:
   }
 }
 
+function getConnectionError() {
+  // navigator.onLine distinguishes a network outage from an unavailable local messaging server.
+  return navigator.onLine
+    ? 'The messaging server is unavailable. Please try again.'
+    : 'You are offline. Check your connection and try again.'
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -190,26 +197,40 @@ export function MessagesPage() {
   }
 
   function sendMessage(content: string) {
-    if (!activeConversationId || !socketRef.current) return
+    const socket = socketRef.current
+    if (!activeConversationId || !socket || !socket.connected) {
+      return Promise.resolve({ ok: false, error: getConnectionError() })
+    }
 
-    socketRef.current.emit(
-      'send_message',
-      { conversationId: activeConversationId, content },
-      (response: { ok: boolean; error?: string; message?: StoredMessage }) => {
-        const storedMessage = response.message
-        if (!response.ok || !storedMessage) {
-          console.error(response.error ?? 'Unable to send the message.')
-          return
-        }
+    const conversationId = activeConversationId
 
-        // The acknowledgement covers the short interval before this client finishes joining the room.
-        setConversations((currentConversations) => currentConversations.map((conversation) => (
-          conversation.id === storedMessage.conversationId
-            ? mergeConversationMessages(conversation, [toMessage(storedMessage)])
-            : conversation
-        )))
-      },
-    )
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      // A timeout prevents the input from waiting forever when the server is unreachable.
+      socket.timeout(5000).emit(
+        'send_message',
+        { conversationId, content },
+        (timeoutError: Error | null, response?: { ok: boolean; error?: string; message?: StoredMessage }) => {
+          if (timeoutError) {
+            resolve({ ok: false, error: getConnectionError() })
+            return
+          }
+
+          const storedMessage = response?.message
+          if (!response?.ok || !storedMessage) {
+            resolve({ ok: false, error: response?.error ?? 'Message was not sent. Please try again.' })
+            return
+          }
+
+          // The acknowledgement covers the short interval before this client finishes joining the room.
+          setConversations((currentConversations) => currentConversations.map((conversation) => (
+            conversation.id === storedMessage.conversationId
+              ? mergeConversationMessages(conversation, [toMessage(storedMessage)])
+              : conversation
+          )))
+          resolve({ ok: true })
+        },
+      )
+    })
   }
 
   function editMessage(messageId: string, content: string) {

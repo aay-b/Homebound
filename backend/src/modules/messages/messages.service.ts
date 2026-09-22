@@ -20,7 +20,8 @@ export type MessageReactionUpdate = {
   conversationId: string
   userId: string
   emoji: string
-  action: 'added' | 'removed'
+  action: 'added' | 'removed' | 'replaced'
+  previousEmoji?: string
 }
 
 const allowedReactionEmojis = new Set(['👍', '❤️', '😂', '😮', '😢', '😡'])
@@ -168,12 +169,12 @@ export async function toggleMessageReaction(
   })
   if (!membership) return { status: 'not_a_member' }
 
-  const existingReaction = await prisma.messageReaction.findUnique({
-    where: { messageId_userId_emoji: { messageId, userId, emoji } },
-    select: { messageId: true },
+  const existingReaction = await prisma.messageReaction.findFirst({
+    where: { messageId, userId },
+    select: { emoji: true },
   })
 
-  if (existingReaction) {
+  if (existingReaction?.emoji === emoji) {
     await prisma.messageReaction.delete({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
     })
@@ -186,6 +187,26 @@ export async function toggleMessageReaction(
         userId: userId.toString(),
         emoji,
         action: 'removed',
+      },
+    }
+  }
+
+  if (existingReaction) {
+    // Choosing a different emoji replaces the member's previous reaction instead of adding a second one.
+    await prisma.messageReaction.update({
+      where: { messageId_userId_emoji: { messageId, userId, emoji: existingReaction.emoji } },
+      data: { emoji },
+    })
+
+    return {
+      status: 'updated',
+      update: {
+        messageId: message.id.toString(),
+        conversationId: message.conversationId.toString(),
+        userId: userId.toString(),
+        emoji,
+        action: 'replaced',
+        previousEmoji: existingReaction.emoji,
       },
     }
   }

@@ -24,6 +24,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [editingContent, setEditingContent] = useState('')
   const [sendError, setSendError] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [dismissedReactionPickerId, setDismissedReactionPickerId] = useState<string | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const isSendingRef = useRef(false)
 
@@ -93,7 +94,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
             <div key={message.id} className={`group/action flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
               {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-800">{conversation.participantInitials}</div>}
               <div className={`relative w-fit min-w-0 max-w-[78%] sm:max-w-[360px] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                <div className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md bg-white text-slate-700 ring-1 ring-slate-100'}`}>
+                <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md bg-white text-slate-700 ring-1 ring-slate-100'}`}>
                   {isEditing ? (
                     <div className="min-w-[220px]">
                       <input value={editingContent} onChange={(event) => setEditingContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveEditing(); if (event.key === 'Escape') setEditingMessageId(null) }} autoFocus className="w-full rounded bg-white/20 px-2 py-1 text-sm outline-none ring-1 ring-white/50" />
@@ -108,8 +109,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                       <time dateTime={message.createdAt} className={`mt-1 block text-right text-[10px] ${isOwnMessage ? 'text-white/65' : 'text-slate-400'}`}>{message.sentAt}</time>
                     </>
                   )}
-                  <div className="absolute right-0 top-full z-10 hidden w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg group-hover/message:flex" aria-label="Choose a reaction">
-                    {reactionOptions.map((emoji) => <button key={emoji} onClick={() => onToggleReaction(message.id, emoji)} className="grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50">{emoji}</button>)}
+                  <div className={`absolute right-0 top-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
+                    {reactionOptions.map((emoji) => <button key={emoji} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className="grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50">{emoji}</button>)}
                   </div>
                 </div>
                 <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isOwnMessage ? 'justify-end' : ''}`}>

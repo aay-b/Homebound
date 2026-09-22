@@ -99,51 +99,67 @@ type MessageReactionUpdate = {
   conversationId: string
   userId: string
   emoji: string
+  action: 'added' | 'removed' | 'replaced'
+  previousEmoji?: string
+}
+
+type AppliedReactionChange = {
+  emoji: string
   action: 'added' | 'removed'
 }
 
-function applyReactionUpdate(
-  conversation: Conversation,
-  update: MessageReactionUpdate,
-  currentUserId: string,
-): Conversation {
+function applyReactionChange(message: Message, change: AppliedReactionChange, update: MessageReactionUpdate, currentUserId: string): Message {
+  const existingReaction = message.reactions.find((reaction) => reaction.emoji === change.emoji)
+  const isCurrentUserReaction = update.userId === currentUserId
+
+  if (change.action === 'added') {
+    const reaction = {
+      emoji: change.emoji,
+      count: (existingReaction?.count ?? 0) + 1,
+      reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || isCurrentUserReaction,
+    }
+
+    return {
+      ...message,
+      reactions: existingReaction
+        ? message.reactions.map((item) => item.emoji === change.emoji ? reaction : item)
+        : [...message.reactions, reaction],
+    }
+  }
+
+  if (!existingReaction) return message
+
+  const reaction = {
+    ...existingReaction,
+    count: existingReaction.count - 1,
+    reactedByCurrentUser: isCurrentUserReaction ? false : existingReaction.reactedByCurrentUser,
+  }
+
+  return {
+    ...message,
+    reactions: reaction.count > 0
+      ? message.reactions.map((item) => item.emoji === change.emoji ? reaction : item)
+      : message.reactions.filter((item) => item.emoji !== change.emoji),
+  }
+}
+
+function applyReactionUpdate(conversation: Conversation, update: MessageReactionUpdate, currentUserId: string): Conversation {
+  const changes: AppliedReactionChange[] = update.action === 'replaced' && update.previousEmoji
+    ? [
+        { emoji: update.previousEmoji, action: 'removed' },
+        { emoji: update.emoji, action: 'added' },
+      ]
+    : [{ emoji: update.emoji, action: update.action === 'removed' ? 'removed' : 'added' }]
+
   return {
     ...conversation,
     messages: conversation.messages.map((message) => {
       if (message.id !== update.messageId) return message
 
-      const existingReaction = message.reactions.find((reaction) => reaction.emoji === update.emoji)
-      const isCurrentUserReaction = update.userId === currentUserId
-
-      if (update.action === 'added') {
-        const reaction = {
-          emoji: update.emoji,
-          count: (existingReaction?.count ?? 0) + 1,
-          reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || isCurrentUserReaction,
-        }
-
-        return {
-          ...message,
-          reactions: existingReaction
-            ? message.reactions.map((item) => item.emoji === update.emoji ? reaction : item)
-            : [...message.reactions, reaction],
-        }
-      }
-
-      if (!existingReaction) return message
-
-      const reaction = {
-        ...existingReaction,
-        count: existingReaction.count - 1,
-        reactedByCurrentUser: isCurrentUserReaction ? false : existingReaction.reactedByCurrentUser,
-      }
-
-      return {
-        ...message,
-        reactions: reaction.count > 0
-          ? message.reactions.map((item) => item.emoji === update.emoji ? reaction : item)
-          : message.reactions.filter((item) => item.emoji !== update.emoji),
-      }
+      // Replacing an emoji is modelled as removing the previous count before adding the new one.
+      return changes.reduce((currentMessage, change) => (
+        applyReactionChange(currentMessage, change, update, currentUserId)
+      ), message)
     }),
   }
 }

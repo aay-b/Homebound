@@ -54,7 +54,7 @@ model Message {
   @@map("messages")
 }
 
-/// Records one emoji reaction per user and emoji combination.
+/// Records at most one selected emoji reaction per user on a message.
 model MessageReaction {
   messageId BigInt   @map("message_id")
   userId    BigInt   @map("user_id")
@@ -64,6 +64,7 @@ model MessageReaction {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([messageId, userId, emoji])
+  @@unique([messageId, userId], map: "message_reactions_one_reaction_per_user")
   @@index([messageId])
   @@map("message_reactions")
 }

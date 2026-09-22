@@ -163,8 +163,10 @@ export function createSocketServer(httpServer: HttpServer) {
           return
         }
 
-        // The sender uses the acknowledgement; other viewers in the open thread receive the broadcast.
-        socket.to(conversationRoom(BigInt(result.update.conversationId))).emit('message_reaction_updated', result.update)
+        // Join as a fallback, then deliver one identical update to every viewer of this conversation.
+        const room = conversationRoom(BigInt(result.update.conversationId))
+        socket.join(room)
+        io.to(room).emit('message_reaction_updated', result.update)
         acknowledge?.({ ok: true, update: result.update })
       } catch {
         acknowledge?.({ ok: false, error: 'Unable to update the reaction.' })

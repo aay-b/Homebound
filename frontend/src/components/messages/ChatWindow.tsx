@@ -25,6 +25,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [sendError, setSendError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [dismissedReactionPickerId, setDismissedReactionPickerId] = useState<string | null>(null)
+  const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const isSendingRef = useRef(false)
 
@@ -93,7 +94,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
           return (
             <div key={message.id} className={`group/action flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
               {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-800">{conversation.participantInitials}</div>}
-              <div className={`relative w-fit min-w-0 max-w-[78%] sm:max-w-[360px] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+              <div className={`relative w-fit min-w-0 max-w-[78%] pb-7 sm:max-w-[360px] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                 <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md bg-white text-slate-700 ring-1 ring-slate-100'}`}>
                   {isEditing ? (
                     <div className="min-w-[220px]">
@@ -109,8 +110,11 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                       <time dateTime={message.createdAt} className={`mt-1 block text-right text-[10px] ${isOwnMessage ? 'text-white/65' : 'text-slate-400'}`}>{message.sentAt}</time>
                     </>
                   )}
-                  <div className={`absolute right-0 top-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
-                    {reactionOptions.map((emoji) => <button key={emoji} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className="grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50">{emoji}</button>)}
+                  <div className={`absolute bottom-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
+                    {reactionOptions.map((emoji) => {
+                      const isSelected = message.reactions.some((reaction) => reaction.emoji === emoji && reaction.reactedByCurrentUser)
+                      return <button key={emoji} type="button" aria-pressed={isSelected} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className={`grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50 ${isSelected ? 'bg-teal-100 ring-1 ring-teal-300' : ''}`}>{emoji}</button>
+                    })}
                   </div>
                 </div>
                 <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isOwnMessage ? 'justify-end' : ''}`}>
@@ -122,9 +126,18 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                     </span>
                   )}
                 </div>
-                <div className={`mt-1.5 flex flex-wrap gap-1.5 ${isOwnMessage ? 'justify-end' : ''}`}>
-                  {message.reactions.map((reaction) => <span key={reaction.emoji} className={`rounded-full border px-2 py-0.5 text-xs ${reaction.reactedByCurrentUser ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-white'}`}>{reaction.emoji} {reaction.count}</span>)}
-                </div>
+                {message.reactions.length > 0 && (
+                  <button type="button" onClick={() => setReactionDetailsMessageId((currentMessageId) => currentMessageId === message.id ? null : message.id)} aria-expanded={reactionDetailsMessageId === message.id} className={`absolute bottom-0 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs transition hover:bg-teal-50 ${isOwnMessage ? 'right-0' : 'left-0'}`}>
+                    {message.reactions.map((reaction) => <span key={reaction.emoji} className="inline-flex items-center gap-1 whitespace-nowrap"><span>{reaction.emoji}</span><span>{reaction.count}</span></span>)}
+                  </button>
+                )}
+                {reactionDetailsMessageId === message.id && (
+                  <div className={`absolute bottom-8 z-20 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg ${isOwnMessage ? 'right-0' : 'left-0'}`}>
+                    {message.reactions.flatMap((reaction) => reaction.reactors.map((reactor) => (
+                      <p key={`${reaction.emoji}-${reactor.id}`} className="flex items-center gap-2 px-1 py-1 text-xs text-slate-700"><span>{reaction.emoji}</span><span>{reactor.name}</span></p>
+                    )))}
+                  </div>
+                )}
               </div>
             </div>
           )

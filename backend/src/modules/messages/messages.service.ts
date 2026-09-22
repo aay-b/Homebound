@@ -13,12 +13,19 @@ export type StoredReaction = {
   emoji: string
   count: number
   reactedByCurrentUser: boolean
+  reactors: StoredReactor[]
+}
+
+export type StoredReactor = {
+  id: string
+  name: string
 }
 
 export type MessageReactionUpdate = {
   messageId: string
   conversationId: string
   userId: string
+  userName: string
   emoji: string
   action: 'added' | 'removed' | 'replaced'
   previousEmoji?: string
@@ -49,7 +56,7 @@ function toStoredMessage(message: {
   senderId: bigint
   content: string
   createdAt: Date
-  reactions?: Array<{ emoji: string; userId: bigint }>
+  reactions?: Array<{ emoji: string; userId: bigint; user: { name: string } }>
 }, currentUserId?: bigint): StoredMessage {
   const reactionsByEmoji = new Map<string, StoredReaction>()
 
@@ -59,6 +66,10 @@ function toStoredMessage(message: {
       emoji: reaction.emoji,
       count: (existingReaction?.count ?? 0) + 1,
       reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || reaction.userId === currentUserId,
+      reactors: [
+        ...(existingReaction?.reactors ?? []),
+        { id: reaction.userId.toString(), name: reaction.user.name },
+      ],
     })
   })
 
@@ -142,7 +153,7 @@ export async function getConversationMessages(
       senderId: true,
       content: true,
       createdAt: true,
-      reactions: { select: { emoji: true, userId: true } },
+      reactions: { select: { emoji: true, userId: true, user: { select: { name: true } } } },
     },
   })
 
@@ -165,7 +176,7 @@ export async function toggleMessageReaction(
   // Reactions follow the same access rule as messages: only conversation members may change them.
   const membership = await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId: message.conversationId, userId } },
-    select: { conversationId: true },
+    select: { conversationId: true, user: { select: { name: true } } },
   })
   if (!membership) return { status: 'not_a_member' }
 
@@ -185,6 +196,7 @@ export async function toggleMessageReaction(
         messageId: message.id.toString(),
         conversationId: message.conversationId.toString(),
         userId: userId.toString(),
+        userName: membership.user.name,
         emoji,
         action: 'removed',
       },
@@ -204,6 +216,7 @@ export async function toggleMessageReaction(
         messageId: message.id.toString(),
         conversationId: message.conversationId.toString(),
         userId: userId.toString(),
+        userName: membership.user.name,
         emoji,
         action: 'replaced',
         previousEmoji: existingReaction.emoji,
@@ -219,6 +232,7 @@ export async function toggleMessageReaction(
       messageId: message.id.toString(),
       conversationId: message.conversationId.toString(),
       userId: userId.toString(),
+      userName: membership.user.name,
       emoji,
       action: 'added',
     },

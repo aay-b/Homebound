@@ -4,6 +4,7 @@ export type MessageReaction = {
   emoji: string
   count: number
   reactedByCurrentUser: boolean
+  reactors: Array<{ id: string; name: string }>
 }
 
 export type Message = {

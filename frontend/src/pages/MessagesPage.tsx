@@ -98,6 +98,7 @@ type MessageReactionUpdate = {
   messageId: string
   conversationId: string
   userId: string
+  userName: string
   emoji: string
   action: 'added' | 'removed' | 'replaced'
   previousEmoji?: string
@@ -117,6 +118,10 @@ function applyReactionChange(message: Message, change: AppliedReactionChange, up
       emoji: change.emoji,
       count: (existingReaction?.count ?? 0) + 1,
       reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || isCurrentUserReaction,
+      reactors: [
+        ...(existingReaction?.reactors ?? []),
+        { id: update.userId, name: update.userName },
+      ],
     }
 
     return {
@@ -133,6 +138,7 @@ function applyReactionChange(message: Message, change: AppliedReactionChange, up
     ...existingReaction,
     count: existingReaction.count - 1,
     reactedByCurrentUser: isCurrentUserReaction ? false : existingReaction.reactedByCurrentUser,
+    reactors: existingReaction.reactors.filter((reactor) => reactor.id !== update.userId),
   }
 
   return {
@@ -337,12 +343,7 @@ export function MessagesPage() {
           return
         }
 
-        // Apply the acknowledgement locally because the sender is excluded from the room broadcast.
-        setConversations((currentConversations) => currentConversations.map((conversation) => (
-          conversation.id === response.update?.conversationId
-            ? applyReactionUpdate(conversation, response.update, currentUserId)
-            : conversation
-        )))
+        // The room event updates every open client, including the sender, exactly once.
       },
     )
   }

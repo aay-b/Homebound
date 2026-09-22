@@ -6,7 +6,24 @@ export type StoredMessage = {
   senderId: string
   content: string
   createdAt: string
+  reactions: StoredReaction[]
 }
+
+export type StoredReaction = {
+  emoji: string
+  count: number
+  reactedByCurrentUser: boolean
+}
+
+export type MessageReactionUpdate = {
+  messageId: string
+  conversationId: string
+  userId: string
+  emoji: string
+  action: 'added' | 'removed'
+}
+
+const allowedReactionEmojis = new Set(['👍', '❤️', '😂', '😮', '😢', '😡'])
 
 type CreateMessageResult =
   | { status: 'empty_content' }
@@ -19,19 +36,38 @@ type ConversationMessagesResult =
   | { status: 'not_a_member'; messages: [] }
   | { status: 'success'; messages: StoredMessage[] }
 
+type ToggleMessageReactionResult =
+  | { status: 'invalid_emoji' }
+  | { status: 'message_not_found' }
+  | { status: 'not_a_member' }
+  | { status: 'updated'; update: MessageReactionUpdate }
+
 function toStoredMessage(message: {
   id: bigint
   conversationId: bigint
   senderId: bigint
   content: string
   createdAt: Date
-}): StoredMessage {
+  reactions?: Array<{ emoji: string; userId: bigint }>
+}, currentUserId?: bigint): StoredMessage {
+  const reactionsByEmoji = new Map<string, StoredReaction>()
+
+  message.reactions?.forEach((reaction) => {
+    const existingReaction = reactionsByEmoji.get(reaction.emoji)
+    reactionsByEmoji.set(reaction.emoji, {
+      emoji: reaction.emoji,
+      count: (existingReaction?.count ?? 0) + 1,
+      reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || reaction.userId === currentUserId,
+    })
+  })
+
   return {
     id: message.id.toString(),
     conversationId: message.conversationId.toString(),
     senderId: message.senderId.toString(),
     content: message.content,
     createdAt: message.createdAt.toISOString(),
+    reactions: [...reactionsByEmoji.values()],
   }
 }
 
@@ -105,8 +141,65 @@ export async function getConversationMessages(
       senderId: true,
       content: true,
       createdAt: true,
+      reactions: { select: { emoji: true, userId: true } },
     },
   })
 
-  return { status: 'success', messages: messages.map(toStoredMessage) }
+  return { status: 'success', messages: messages.map((message) => toStoredMessage(message, currentUserId)) }
+}
+
+export async function toggleMessageReaction(
+  messageId: bigint,
+  userId: bigint,
+  emoji: string,
+): Promise<ToggleMessageReactionResult> {
+  if (!allowedReactionEmojis.has(emoji)) return { status: 'invalid_emoji' }
+
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true, deletedAt: true },
+  })
+  if (!message || message.deletedAt) return { status: 'message_not_found' }
+
+  // Reactions follow the same access rule as messages: only conversation members may change them.
+  const membership = await prisma.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId: message.conversationId, userId } },
+    select: { conversationId: true },
+  })
+  if (!membership) return { status: 'not_a_member' }
+
+  const existingReaction = await prisma.messageReaction.findUnique({
+    where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    select: { messageId: true },
+  })
+
+  if (existingReaction) {
+    await prisma.messageReaction.delete({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    })
+
+    return {
+      status: 'updated',
+      update: {
+        messageId: message.id.toString(),
+        conversationId: message.conversationId.toString(),
+        userId: userId.toString(),
+        emoji,
+        action: 'removed',
+      },
+    }
+  }
+
+  await prisma.messageReaction.create({ data: { messageId, userId, emoji } })
+
+  return {
+    status: 'updated',
+    update: {
+      messageId: message.id.toString(),
+      conversationId: message.conversationId.toString(),
+      userId: userId.toString(),
+      emoji,
+      action: 'added',
+    },
+  }
 }

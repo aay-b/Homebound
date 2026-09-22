@@ -61,7 +61,7 @@ function toMessage(storedMessage: StoredMessage): Message {
     content: storedMessage.content,
     createdAt: storedMessage.createdAt,
     sentAt: formatMessageTime(storedMessage.createdAt),
-    reactions: [],
+    reactions: storedMessage.reactions,
   }
 }
 
@@ -94,6 +94,60 @@ function getConnectionError() {
     : 'You are offline. Check your connection and try again.'
 }
 
+type MessageReactionUpdate = {
+  messageId: string
+  conversationId: string
+  userId: string
+  emoji: string
+  action: 'added' | 'removed'
+}
+
+function applyReactionUpdate(
+  conversation: Conversation,
+  update: MessageReactionUpdate,
+  currentUserId: string,
+): Conversation {
+  return {
+    ...conversation,
+    messages: conversation.messages.map((message) => {
+      if (message.id !== update.messageId) return message
+
+      const existingReaction = message.reactions.find((reaction) => reaction.emoji === update.emoji)
+      const isCurrentUserReaction = update.userId === currentUserId
+
+      if (update.action === 'added') {
+        const reaction = {
+          emoji: update.emoji,
+          count: (existingReaction?.count ?? 0) + 1,
+          reactedByCurrentUser: (existingReaction?.reactedByCurrentUser ?? false) || isCurrentUserReaction,
+        }
+
+        return {
+          ...message,
+          reactions: existingReaction
+            ? message.reactions.map((item) => item.emoji === update.emoji ? reaction : item)
+            : [...message.reactions, reaction],
+        }
+      }
+
+      if (!existingReaction) return message
+
+      const reaction = {
+        ...existingReaction,
+        count: existingReaction.count - 1,
+        reactedByCurrentUser: isCurrentUserReaction ? false : existingReaction.reactedByCurrentUser,
+      }
+
+      return {
+        ...message,
+        reactions: reaction.count > 0
+          ? message.reactions.map((item) => item.emoji === update.emoji ? reaction : item)
+          : message.reactions.filter((item) => item.emoji !== update.emoji),
+      }
+    }),
+  }
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -119,10 +173,20 @@ export function MessagesPage() {
       )))
     }
 
+    const handleReactionUpdated = (update: MessageReactionUpdate) => {
+      setConversations((currentConversations) => currentConversations.map((conversation) => (
+        conversation.id === update.conversationId
+          ? applyReactionUpdate(conversation, update, currentUserId)
+          : conversation
+      )))
+    }
+
     socket.on('message_created', handleMessageCreated)
+    socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
       socket.off('message_created', handleMessageCreated)
+      socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
     }
@@ -242,14 +306,29 @@ export function MessagesPage() {
   }
 
   function toggleReaction(messageId: string, emoji: string) {
-    updateActiveConversation((conversation) => ({ ...conversation, messages: conversation.messages.map((message) => {
-      if (message.id !== messageId) return message
-      const reaction = message.reactions.find((item) => item.emoji === emoji)
-      const reactions = reaction
-        ? message.reactions.map((item) => item.emoji === emoji ? { ...item, count: item.reactedByCurrentUser ? item.count - 1 : item.count + 1, reactedByCurrentUser: !item.reactedByCurrentUser } : item).filter((item) => item.count > 0)
-        : [...message.reactions, { emoji, count: 1, reactedByCurrentUser: true }]
-      return { ...message, reactions }
-    }) }))
+    const socket = socketRef.current
+    if (!socket || !socket.connected) {
+      console.error(getConnectionError())
+      return
+    }
+
+    socket.timeout(5000).emit(
+      'toggle_reaction',
+      { messageId, emoji },
+      (timeoutError: Error | null, response?: { ok: boolean; error?: string; update?: MessageReactionUpdate }) => {
+        if (timeoutError || !response?.ok || !response.update) {
+          console.error(response?.error ?? 'Unable to update the reaction.')
+          return
+        }
+
+        // Apply the acknowledgement locally because the sender is excluded from the room broadcast.
+        setConversations((currentConversations) => currentConversations.map((conversation) => (
+          conversation.id === response.update?.conversationId
+            ? applyReactionUpdate(conversation, response.update, currentUserId)
+            : conversation
+        )))
+      },
+    )
   }
 
   async function handleRequestAction(requestId: string, action: 'accept' | 'decline') {

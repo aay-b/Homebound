@@ -2,14 +2,20 @@ import type { Server as HttpServer } from 'node:http'
 import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
-import { createMessage, type StoredMessage } from '@/modules/messages/messages.service.js'
+import { createMessage, toggleMessageReaction, type MessageReactionUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
 
 type JoinConversationAcknowledgement = (response: { ok: boolean; message?: string }) => void
 type SendMessageAcknowledgement = (response: { ok: boolean; error?: string; message?: StoredMessage }) => void
+type ToggleReactionAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageReactionUpdate }) => void
 
 type SendMessagePayload = {
   conversationId: unknown
   content: unknown
+}
+
+type ToggleReactionPayload = {
+  messageId: unknown
+  emoji: unknown
 }
 
 export function userRoom(userId: bigint) {
@@ -37,6 +43,16 @@ function parseSendMessagePayload(value: unknown): { conversationId: bigint; cont
   if (!conversationId || typeof payload.content !== 'string') return null
 
   return { conversationId, content: payload.content }
+}
+
+function parseToggleReactionPayload(value: unknown): { messageId: bigint; emoji: string } | null {
+  if (!value || typeof value !== 'object') return null
+
+  const payload = value as ToggleReactionPayload
+  const messageId = toDatabaseId(payload.messageId)
+  if (!messageId || typeof payload.emoji !== 'string') return null
+
+  return { messageId, emoji: payload.emoji }
 }
 
 export function createSocketServer(httpServer: HttpServer) {
@@ -119,6 +135,39 @@ export function createSocketServer(httpServer: HttpServer) {
         acknowledge?.({ ok: true, message: result.message })
       } catch {
         acknowledge?.({ ok: false, error: 'Unable to send the message.' })
+      }
+    })
+
+    socket.on('toggle_reaction', async (payloadValue: unknown, acknowledge?: ToggleReactionAcknowledgement) => {
+      try {
+        const payload = parseToggleReactionPayload(payloadValue)
+        if (!payload) {
+          acknowledge?.({ ok: false, error: 'A valid message ID and emoji are required.' })
+          return
+        }
+
+        const result = await toggleMessageReaction(payload.messageId, userId, payload.emoji)
+
+        if (result.status === 'invalid_emoji') {
+          acknowledge?.({ ok: false, error: 'This reaction is not supported.' })
+          return
+        }
+
+        if (result.status === 'message_not_found') {
+          acknowledge?.({ ok: false, error: 'Message was not found.' })
+          return
+        }
+
+        if (result.status === 'not_a_member') {
+          acknowledge?.({ ok: false, error: 'User is not a conversation member.' })
+          return
+        }
+
+        // The sender uses the acknowledgement; other viewers in the open thread receive the broadcast.
+        socket.to(conversationRoom(BigInt(result.update.conversationId))).emit('message_reaction_updated', result.update)
+        acknowledge?.({ ok: true, update: result.update })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to update the reaction.' })
       }
     })
   })

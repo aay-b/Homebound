@@ -1,9 +1,16 @@
+export type StoredReaction = {
+  emoji: string
+  count: number
+  reactedByCurrentUser: boolean
+}
+
 export type StoredMessage = {
   id: string
   conversationId: string
   senderId: string
   content: string
   createdAt: string
+  reactions: StoredReaction[]
 }
 
 type ConversationMessagesResponse = {

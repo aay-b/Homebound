@@ -1,6 +1,28 @@
 import homeboundLogo from "../assets/images/Homebound-logo.jpeg";
+import { useState } from "react";
+import { registerUser } from "../services/authService";
 
 export default function Register() {
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setError("");
+        setSuccess("");
+        const result = await registerUser(name, email, password);
+        if (!result.response.ok) {
+            const firstError =
+                Object.values(result.data.errors ?? {}).flat()[0];
+
+            setError(firstError ?? result.data.message);
+            return;
+        }
+        setSuccess("Registration information is valid");
+};
+
     return (
         <main className="min-h-screen bg-stone-50 px-6 py-8 text-stone-900">
             <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl overflow-hidden rounded-3xl bg-white shadow-xl">
@@ -30,7 +52,19 @@ export default function Register() {
                             Join Homebound and start your adoption journey.
                         </p>
 
-                        <form className="mt-8 space-y-5">
+                        {error && (
+                            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+                            {error}
+                            </p>
+                        )}
+
+                        {success && (
+                            <p className="mt-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
+                                {success}
+                            </p>
+                        )}
+
+                        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
                             <div>
                                 <label
                                     htmlFor="name"
@@ -41,6 +75,8 @@ export default function Register() {
                                     id="name"
                                     type="text"
                                     placeholder="Enter your full name"
+                                    value={name}
+                                    onChange={(event) => setName(event.target.value)}
                                     className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm outline-none transition placeholder:text-stone-400 focus:border-stone-500 focus:bg-white focus:ring-2 focus:ring-stone-200"/>
                             </div>
                             <div>
@@ -53,6 +89,8 @@ export default function Register() {
                                     id="email"
                                     type="email"
                                     placeholder="you@example.com"
+                                    value={email}
+                                    onChange={(event) => setEmail(event.target.value)}
                                     className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm outline-none transition placeholder:text-stone-400 focus:border-stone-500 focus:bg-white focus:ring-2 focus:ring-stone-200"/>
                             </div>
                             <div>
@@ -65,6 +103,8 @@ export default function Register() {
                                     id="password"
                                     type="password"
                                     placeholder="Enter a strong password"
+                                    value={password}
+                                    onChange={(event) => setPassword(event.target.value)}
                                     className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm outline-none transition placeholder:text-stone-400 focus:border-stone-500 focus:bg-white focus:ring-2 focus:ring-stone-200"/>
                             </div>
                             <button

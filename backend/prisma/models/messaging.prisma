@@ -11,7 +11,7 @@ model MessageRequest {
 
   @@unique([senderId, recipientId], map: "message_requests_one_pending_request", where: raw("(status = 'pending'::text)"))
   @@index([recipientId, status, createdAt(sort: Desc)], map: "message_requests_recipient_status_index")
-  @@map("message_requests")
+  @@map("MessageRequests")
 }
 
 /// Represents a private messaging thread between its members.
@@ -21,7 +21,7 @@ model Conversation {
   members   ConversationMember[]
   messages  Message[]
 
-  @@map("conversations")
+  @@map("Conversations")
 }
 
 /// Connects users to the conversations they are allowed to access.
@@ -34,7 +34,7 @@ model ConversationMember {
 
   @@id([conversationId, userId])
   @@index([userId, conversationId])
-  @@map("conversation_members")
+  @@map("ConversationMembers")
 }
 
 /// Stores a message and supports soft deletion through deletedAt.
@@ -51,7 +51,7 @@ model Message {
   reactions      MessageReaction[]
 
   @@index([conversationId, createdAt])
-  @@map("messages")
+  @@map("Messages")
 }
 
 /// Records at most one selected emoji reaction per user on a message.
@@ -66,5 +66,5 @@ model MessageReaction {
   @@id([messageId, userId, emoji])
   @@unique([messageId, userId], map: "message_reactions_one_reaction_per_user")
   @@index([messageId])
-  @@map("message_reactions")
+  @@map("MessageReactions")
 }

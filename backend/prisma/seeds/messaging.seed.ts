@@ -44,7 +44,7 @@ async function main() {
 
   // Keep future auto-incremented user IDs above the seeded records.
   await prisma.$executeRawUnsafe(
-    "select setval(pg_get_serial_sequence('public.users', 'id'), (select max(id) from public.users))",
+    'select setval(pg_get_serial_sequence(\'public."Users"\', \'id\'), (select max(id) from public."Users"))',
   )
 }
 

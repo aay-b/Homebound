@@ -11,5 +11,5 @@ model User {
   sentMessages             Message[]
   reactions                MessageReaction[]
 
-  @@map("users")
+  @@map("Users")
 }

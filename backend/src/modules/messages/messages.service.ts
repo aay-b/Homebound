@@ -6,7 +6,15 @@ export type StoredMessage = {
   senderId: string
   content: string
   createdAt: string
+  editedAt: string | null
   reactions: StoredReaction[]
+}
+
+export type MessageUpdate = {
+  id: string
+  conversationId: string
+  content: string
+  editedAt: string
 }
 
 export type StoredReaction = {
@@ -50,12 +58,19 @@ type ToggleMessageReactionResult =
   | { status: 'not_a_member' }
   | { status: 'updated'; update: MessageReactionUpdate }
 
+type EditMessageResult =
+  | { status: 'empty_content' }
+  | { status: 'message_not_found' }
+  | { status: 'not_sender' }
+  | { status: 'updated'; update: MessageUpdate }
+
 function toStoredMessage(message: {
   id: bigint
   conversationId: bigint
   senderId: bigint
   content: string
   createdAt: Date
+  editedAt?: Date | null
   reactions?: Array<{ emoji: string; userId: bigint; user: { name: string } }>
 }, currentUserId?: bigint): StoredMessage {
   const reactionsByEmoji = new Map<string, StoredReaction>()
@@ -79,6 +94,7 @@ function toStoredMessage(message: {
     senderId: message.senderId.toString(),
     content: message.content,
     createdAt: message.createdAt.toISOString(),
+    editedAt: message.editedAt?.toISOString() ?? null,
     reactions: [...reactionsByEmoji.values()],
   }
 }
@@ -118,12 +134,47 @@ export async function createMessage(
       senderId: true,
       content: true,
       createdAt: true,
+      editedAt: true,
     },
   })
 
   return {
     status: 'created',
     message: toStoredMessage(message),
+  }
+}
+
+export async function editMessage(
+  messageId: bigint,
+  senderId: bigint,
+  content: string,
+): Promise<EditMessageResult> {
+  // Keep validation on the server because socket payloads can bypass the UI.
+  const normalizedContent = content.trim()
+  if (!normalizedContent) return { status: 'empty_content' }
+
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true, senderId: true, deletedAt: true },
+  })
+
+  if (!message || message.deletedAt) return { status: 'message_not_found' }
+  if (message.senderId !== senderId) return { status: 'not_sender' }
+
+  const updatedMessage = await prisma.message.update({
+    where: { id: messageId },
+    data: { content: normalizedContent, editedAt: new Date() },
+    select: { id: true, conversationId: true, content: true, editedAt: true },
+  })
+
+  return {
+    status: 'updated',
+    update: {
+      id: updatedMessage.id.toString(),
+      conversationId: updatedMessage.conversationId.toString(),
+      content: updatedMessage.content,
+      editedAt: updatedMessage.editedAt!.toISOString(),
+    },
   }
 }
 

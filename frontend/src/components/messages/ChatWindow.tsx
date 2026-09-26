@@ -6,11 +6,16 @@ type SendMessageResult = {
   error?: string
 }
 
+type EditMessageResult = {
+  ok: boolean
+  error?: string
+}
+
 type ChatWindowProps = {
   conversation?: Conversation
   currentUserId: string
   onSendMessage: (content: string) => Promise<SendMessageResult>
-  onEditMessage: (messageId: string, content: string) => void
+  onEditMessage: (messageId: string, content: string) => Promise<EditMessageResult>
   onDeleteMessage: (messageId: string) => void
   onToggleReaction: (messageId: string, emoji: string) => void
 }
@@ -22,12 +27,15 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [draft, setDraft] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
+  const [editError, setEditError] = useState('')
+  const [isEditingMessage, setIsEditingMessage] = useState(false)
   const [sendError, setSendError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [dismissedReactionPickerId, setDismissedReactionPickerId] = useState<string | null>(null)
   const [reactionDetailsMessageId, setReactionDetailsMessageId] = useState<string | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const isSendingRef = useRef(false)
+  const isEditingRef = useRef(false)
 
   useEffect(() => {
     // Scroll only the message pane so receiving a message never moves the entire page.
@@ -68,12 +76,30 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   function startEditing(message: Message) {
     setEditingMessageId(message.id)
     setEditingContent(message.content)
+    setEditError('')
   }
 
-  function saveEditing() {
-    if (!editingMessageId || !editingContent.trim()) return
-    onEditMessage(editingMessageId, editingContent.trim())
-    setEditingMessageId(null)
+  async function saveEditing() {
+    if (!editingMessageId || !editingContent.trim() || isEditingRef.current) return
+
+    // Block repeated Enter presses before React state can disable the Save button.
+    isEditingRef.current = true
+    setIsEditingMessage(true)
+    setEditError('')
+
+    try {
+      const result = await onEditMessage(editingMessageId, editingContent.trim())
+      if (result.ok) {
+        setEditingMessageId(null)
+      } else {
+        setEditError(result.error ?? 'Message was not edited. Please try again.')
+      }
+    } catch {
+      setEditError('Message was not edited. Please try again.')
+    } finally {
+      isEditingRef.current = false
+      setIsEditingMessage(false)
+    }
   }
 
   return (
@@ -87,27 +113,28 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
       </header>
 
-      <div ref={messagesContainerRef} className="flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
+      <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-6 sm:px-7">
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
           const isEditing = editingMessageId === message.id
           return (
-            <div key={message.id} className={`group/action flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+            <div key={message.id} className={`flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
               {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FABF6B]/40 text-[10px] font-bold text-[#344336]">{conversation.participantInitials}</div>}
-              <div className={`relative w-fit min-w-0 max-w-[78%] pb-7 sm:max-w-[360px] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+              <div className={`group/action relative w-fit min-w-0 max-w-[78%] sm:max-w-[360px] ${message.reactions.length > 0 ? 'pb-7' : ''} ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                 <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-[#757A5E] text-white' : 'rounded-bl-md bg-white text-[#344336] ring-1 ring-[#757A5E]/15'}`}>
                   {isEditing ? (
                     <div className="min-w-[220px]">
-                      <input value={editingContent} onChange={(event) => setEditingContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveEditing(); if (event.key === 'Escape') setEditingMessageId(null) }} autoFocus className="w-full rounded bg-white/20 px-2 py-1 text-sm outline-none ring-1 ring-white/50" />
+                      <input value={editingContent} onChange={(event) => setEditingContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveEditing(); if (event.key === 'Escape') setEditingMessageId(null) }} autoFocus disabled={isEditingMessage} className="w-full rounded bg-white/20 px-2 py-1 text-sm outline-none ring-1 ring-white/50 disabled:opacity-60" />
                       <div className="mt-2 flex gap-2 text-xs font-semibold">
-                        <button onClick={saveEditing}>Save</button>
-                        <button onClick={() => setEditingMessageId(null)} className="opacity-70">Cancel</button>
+                        <button disabled={isEditingMessage} onClick={saveEditing} className="disabled:opacity-60">Save</button>
+                        <button disabled={isEditingMessage} onClick={() => { setEditingMessageId(null); setEditError('') }} className="opacity-70 disabled:opacity-40">Cancel</button>
                       </div>
+                      {editError && <p className="mt-2 text-xs text-[#D7885C]" role="alert">{editError}</p>}
                     </div>
                   ) : (
                     <>
                       <p className="break-words [overflow-wrap:anywhere] text-sm leading-6">{message.content}</p>
-                      <time dateTime={message.createdAt} className={`mt-1 block text-right text-[10px] ${isOwnMessage ? 'text-white/65' : 'text-slate-400'}`}>{message.sentAt}</time>
+                      <time dateTime={message.createdAt} className={`mt-1 block text-[10px] ${isOwnMessage ? 'text-right text-white/65' : 'text-left text-slate-400'}`}>{message.sentAt}</time>
                     </>
                   )}
                   <div className={`absolute bottom-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
@@ -118,7 +145,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   </div>
                 </div>
                 <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isOwnMessage ? 'justify-end' : ''}`}>
-                  {message.edited && <span>Edited</span>}
+                  {message.edited && <span className="group-hover/action:hidden">Edited</span>}
                   {isOwnMessage && !isEditing && (
                     <span className="hidden gap-2 group-hover/action:flex">
                       <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>

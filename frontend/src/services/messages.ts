@@ -11,6 +11,7 @@ export type StoredMessage = {
   senderId: string
   content: string
   createdAt: string
+  editedAt: string | null
   reactions: StoredReaction[]
 }
 

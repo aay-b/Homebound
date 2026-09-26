@@ -2,11 +2,12 @@ import type { Server as HttpServer } from 'node:http'
 import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
-import { createMessage, toggleMessageReaction, type MessageReactionUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
+import { createMessage, editMessage, toggleMessageReaction, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
 
 type JoinConversationAcknowledgement = (response: { ok: boolean; message?: string }) => void
 type SendMessageAcknowledgement = (response: { ok: boolean; error?: string; message?: StoredMessage }) => void
 type ToggleReactionAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageReactionUpdate }) => void
+type EditMessageAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageUpdate }) => void
 
 type SendMessagePayload = {
   conversationId: unknown
@@ -16,6 +17,11 @@ type SendMessagePayload = {
 type ToggleReactionPayload = {
   messageId: unknown
   emoji: unknown
+}
+
+type EditMessagePayload = {
+  messageId: unknown
+  content: unknown
 }
 
 export function userRoom(userId: bigint) {
@@ -53,6 +59,16 @@ function parseToggleReactionPayload(value: unknown): { messageId: bigint; emoji:
   if (!messageId || typeof payload.emoji !== 'string') return null
 
   return { messageId, emoji: payload.emoji }
+}
+
+function parseEditMessagePayload(value: unknown): { messageId: bigint; content: string } | null {
+  if (!value || typeof value !== 'object') return null
+
+  const payload = value as EditMessagePayload
+  const messageId = toDatabaseId(payload.messageId)
+  if (!messageId || typeof payload.content !== 'string') return null
+
+  return { messageId, content: payload.content }
 }
 
 export function createSocketServer(httpServer: HttpServer) {
@@ -135,6 +151,41 @@ export function createSocketServer(httpServer: HttpServer) {
         acknowledge?.({ ok: true, message: result.message })
       } catch {
         acknowledge?.({ ok: false, error: 'Unable to send the message.' })
+      }
+    })
+
+    socket.on('edit_message', async (payloadValue: unknown, acknowledge?: EditMessageAcknowledgement) => {
+      try {
+        const payload = parseEditMessagePayload(payloadValue)
+        if (!payload) {
+          acknowledge?.({ ok: false, error: 'A valid message ID and message content are required.' })
+          return
+        }
+
+        const result = await editMessage(payload.messageId, userId, payload.content)
+
+        if (result.status === 'empty_content') {
+          acknowledge?.({ ok: false, error: 'Message content cannot be empty.' })
+          return
+        }
+
+        if (result.status === 'message_not_found') {
+          acknowledge?.({ ok: false, error: 'Message was not found.' })
+          return
+        }
+
+        if (result.status === 'not_sender') {
+          acknowledge?.({ ok: false, error: 'Only the sender can edit this message.' })
+          return
+        }
+
+        // Broadcast the persisted update so both open participants see the same edited content.
+        const room = conversationRoom(BigInt(result.update.conversationId))
+        socket.join(room)
+        io.to(room).emit('message_updated', result.update)
+        acknowledge?.({ ok: true, update: result.update })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to edit the message.' })
       }
     })
 

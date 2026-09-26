@@ -61,6 +61,7 @@ function toMessage(storedMessage: StoredMessage): Message {
     content: storedMessage.content,
     createdAt: storedMessage.createdAt,
     sentAt: formatMessageTime(storedMessage.createdAt),
+    edited: Boolean(storedMessage.editedAt),
     reactions: storedMessage.reactions,
   }
 }
@@ -102,6 +103,13 @@ type MessageReactionUpdate = {
   emoji: string
   action: 'added' | 'removed' | 'replaced'
   previousEmoji?: string
+}
+
+type MessageUpdate = {
+  id: string
+  conversationId: string
+  content: string
+  editedAt: string
 }
 
 type AppliedReactionChange = {
@@ -170,6 +178,18 @@ function applyReactionUpdate(conversation: Conversation, update: MessageReaction
   }
 }
 
+function applyMessageUpdate(conversation: Conversation, update: MessageUpdate): Conversation {
+  const messages = conversation.messages.map((message) => (
+    message.id === update.id ? { ...message, content: update.content, edited: true } : message
+  ))
+
+  return {
+    ...conversation,
+    messages,
+    lastMessage: messages.at(-1)?.id === update.id ? update.content : conversation.lastMessage,
+  }
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -203,11 +223,21 @@ export function MessagesPage() {
       )))
     }
 
+    const handleMessageUpdated = (update: MessageUpdate) => {
+      setConversations((currentConversations) => currentConversations.map((conversation) => (
+        conversation.id === update.conversationId
+          ? applyMessageUpdate(conversation, update)
+          : conversation
+      )))
+    }
+
     socket.on('message_created', handleMessageCreated)
+    socket.on('message_updated', handleMessageUpdated)
     socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
       socket.off('message_created', handleMessageCreated)
+      socket.off('message_updated', handleMessageUpdated)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
@@ -320,7 +350,31 @@ export function MessagesPage() {
   }
 
   function editMessage(messageId: string, content: string) {
-    updateActiveConversation((conversation) => ({ ...conversation, lastMessage: conversation.messages.at(-1)?.id === messageId ? content : conversation.lastMessage, messages: conversation.messages.map((message) => message.id === messageId ? { ...message, content, edited: true } : message) }))
+    const socket = socketRef.current
+    if (!socket || !socket.connected) {
+      return Promise.resolve({ ok: false, error: getConnectionError() })
+    }
+
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.timeout(5000).emit(
+        'edit_message',
+        { messageId, content },
+        (timeoutError: Error | null, response?: { ok: boolean; error?: string; update?: MessageUpdate }) => {
+          if (timeoutError) {
+            resolve({ ok: false, error: getConnectionError() })
+            return
+          }
+
+          if (!response?.ok || !response.update) {
+            resolve({ ok: false, error: response?.error ?? 'Message was not edited. Please try again.' })
+            return
+          }
+
+          // The room event handles the visible update for every participant, including the editor.
+          resolve({ ok: true })
+        },
+      )
+    })
   }
 
   function deleteMessage(messageId: string) {

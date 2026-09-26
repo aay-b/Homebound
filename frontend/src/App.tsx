@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Register from "./pages/Register";
+import Login from "./pages/Login";
 
 export function App() {
     return (
@@ -14,6 +15,7 @@ export function App() {
                 />
 
                 <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<Login />} />
 
                 {/* <Route path="/URL ADD-ON" element={<PAGE FUNCTION IMPORTED/>}/> */}
 

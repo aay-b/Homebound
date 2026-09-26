@@ -15,5 +15,6 @@ export function getSupabaseEnv() {
   return {
     supabaseUrl: required('SUPABASE_URL'),
     supabaseSecretKey: required('SUPABASE_SECRET_KEY'),
+    supabasePublishableKey: required('SUPABASE_PUBLISHABLE_KEY'),
   }
 }

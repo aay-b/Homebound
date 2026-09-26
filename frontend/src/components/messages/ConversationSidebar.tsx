@@ -33,6 +33,15 @@ export function ConversationSidebar({
   const [requestError, setRequestError] = useState('')
   const [requestingRecipientId, setRequestingRecipientId] = useState<string | null>(null)
   const [sentRecipientIds, setSentRecipientIds] = useState<Set<string>>(() => new Set())
+  const [contextMenuConversationId, setContextMenuConversationId] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Close a conversation context menu when the user interacts anywhere else on the page.
+    const closeContextMenu = () => setContextMenuConversationId(null)
+    window.addEventListener('pointerdown', closeContextMenu)
+
+    return () => window.removeEventListener('pointerdown', closeContextMenu)
+  }, [])
 
   useEffect(() => {
     // This set only covers requests sent during the current page session.
@@ -188,14 +197,26 @@ export function ConversationSidebar({
           {conversations.map((conversation) => {
             const isActive = conversation.id === activeConversationId
             return (
-              <button key={conversation.id} onClick={() => onConversationSelect(conversation.id)} className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${isActive ? 'bg-[#FABF6B]/20 ring-1 ring-inset ring-[#FABF6B]/60' : 'hover:bg-[#757A5E]/10'}`}>
-                <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold ${isActive ? 'bg-[#757A5E] text-white' : 'bg-[#757A5E]/15 text-[#344336]'}`}>{conversation.participantInitials}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-bold text-slate-800">{conversation.participantName}</p>
+              <div key={conversation.id} className="relative overflow-hidden rounded-xl">
+                {contextMenuConversationId === conversation.id && (
+                  <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setContextMenuConversationId(null)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl bg-[#D7885C] text-white transition hover:bg-[#344336]" aria-label={`Delete conversation with ${conversation.participantName}`} title="Delete conversation">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v5M14 11v5" />
+                    </svg>
+                  </button>
+                )}
+                <button onClick={() => { onConversationSelect(conversation.id); setContextMenuConversationId(null) }} onContextMenu={(event) => { event.preventDefault(); setContextMenuConversationId(conversation.id) }} className={`relative z-10 flex items-center p-3 text-left transition-[width,gap] duration-200 ease-out ${contextMenuConversationId === conversation.id ? 'w-[calc(100%-3rem)] gap-2 rounded-l-xl' : 'w-full gap-3 rounded-xl'} ${isActive ? contextMenuConversationId === conversation.id ? 'bg-[#FABF6B]/20' : 'bg-[#FABF6B]/20 ring-1 ring-inset ring-[#FABF6B]/60' : 'bg-[#fffdf9] hover:bg-[#757A5E]/10'}`}>
+                  <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold ${isActive ? 'bg-[#757A5E] text-white' : 'bg-[#757A5E]/15 text-[#344336]'}`}>{conversation.participantInitials}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-bold text-slate-800">{conversation.participantName}</p>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              </div>
             )
           })}
         </div>

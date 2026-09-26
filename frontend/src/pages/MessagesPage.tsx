@@ -117,6 +117,10 @@ type MessageDeletion = {
   conversationId: string
 }
 
+type ConversationDeletion = {
+  id: string
+}
+
 type AppliedReactionChange = {
   emoji: string
   action: 'added' | 'removed'
@@ -256,15 +260,22 @@ export function MessagesPage() {
       )))
     }
 
+    const handleConversationDeleted = (deletion: ConversationDeletion) => {
+      setConversations((currentConversations) => currentConversations.filter((conversation) => conversation.id !== deletion.id))
+      setActiveConversationId((currentConversationId) => currentConversationId === deletion.id ? null : currentConversationId)
+    }
+
     socket.on('message_created', handleMessageCreated)
     socket.on('message_updated', handleMessageUpdated)
     socket.on('message_deleted', handleMessageDeleted)
+    socket.on('conversation_deleted', handleConversationDeleted)
     socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
       socket.off('message_created', handleMessageCreated)
       socket.off('message_updated', handleMessageUpdated)
       socket.off('message_deleted', handleMessageDeleted)
+      socket.off('conversation_deleted', handleConversationDeleted)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
@@ -417,6 +428,34 @@ export function MessagesPage() {
     )
   }
 
+  function deleteConversation(conversationId: string) {
+    const socket = socketRef.current
+    if (!socket || !socket.connected) {
+      return Promise.resolve({ ok: false, error: getConnectionError() })
+    }
+
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.timeout(5000).emit(
+        'delete_conversation',
+        { conversationId },
+        (timeoutError: Error | null, response?: { ok: boolean; error?: string; deletion?: ConversationDeletion }) => {
+          if (timeoutError) {
+            resolve({ ok: false, error: getConnectionError() })
+            return
+          }
+
+          if (!response?.ok || !response.deletion) {
+            resolve({ ok: false, error: response?.error ?? 'Unable to delete the conversation.' })
+            return
+          }
+
+          // Both dashboards are updated by the personal-room conversation_deleted event.
+          resolve({ ok: true })
+        },
+      )
+    })
+  }
+
   function toggleReaction(messageId: string, emoji: string) {
     const socket = socketRef.current
     if (!socket || !socket.connected) {
@@ -481,7 +520,7 @@ export function MessagesPage() {
           <span className="grid h-9 w-9 place-items-center rounded-full bg-[#757A5E] text-sm font-bold text-white ring-1 ring-[#FABF6B]/50" aria-label="Open profile">U</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex">
-          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
         </div>
       </div>

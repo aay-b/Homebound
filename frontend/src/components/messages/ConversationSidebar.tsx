@@ -13,6 +13,7 @@ type ConversationSidebarProps = {
   onRequestAction: (requestId: string, action: 'accept' | 'decline') => void
   onCancelOutgoingRequest: (requestId: string) => void
   onOutgoingRequestCreated: (request: MessageRequest) => void
+  onConversationDelete: (conversationId: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 export function ConversationSidebar({
@@ -25,6 +26,7 @@ export function ConversationSidebar({
   onRequestAction,
   onCancelOutgoingRequest,
   onOutgoingRequestCreated,
+  onConversationDelete,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
@@ -34,6 +36,10 @@ export function ConversationSidebar({
   const [requestingRecipientId, setRequestingRecipientId] = useState<string | null>(null)
   const [sentRecipientIds, setSentRecipientIds] = useState<Set<string>>(() => new Set())
   const [contextMenuConversationId, setContextMenuConversationId] = useState<string | null>(null)
+  const [conversationIdPendingDeletion, setConversationIdPendingDeletion] = useState<string | null>(null)
+  const [conversationDeleteError, setConversationDeleteError] = useState('')
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false)
+  const conversationPendingDeletion = conversations.find((conversation) => conversation.id === conversationIdPendingDeletion)
 
   useEffect(() => {
     // Close a conversation context menu when the user interacts anywhere else on the page.
@@ -104,6 +110,26 @@ export function ConversationSidebar({
       setRequestError(error instanceof Error ? error.message : 'Unable to send the message request.')
     } finally {
       setRequestingRecipientId(null)
+    }
+  }
+
+  async function handleConversationDeletion() {
+    if (!conversationPendingDeletion || isDeletingConversation) return
+
+    setIsDeletingConversation(true)
+    setConversationDeleteError('')
+
+    try {
+      const result = await onConversationDelete(conversationPendingDeletion.id)
+      if (result.ok) {
+        setConversationIdPendingDeletion(null)
+      } else {
+        setConversationDeleteError(result.error ?? 'Unable to delete the conversation.')
+      }
+    } catch {
+      setConversationDeleteError('Unable to delete the conversation.')
+    } finally {
+      setIsDeletingConversation(false)
     }
   }
 
@@ -199,7 +225,7 @@ export function ConversationSidebar({
             return (
               <div key={conversation.id} className="relative overflow-hidden rounded-xl">
                 {contextMenuConversationId === conversation.id && (
-                  <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setContextMenuConversationId(null)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl bg-[#D7885C] text-white transition hover:bg-[#344336]" aria-label={`Delete conversation with ${conversation.participantName}`} title="Delete conversation">
+                  <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setConversationDeleteError(''); setConversationIdPendingDeletion(conversation.id); setContextMenuConversationId(null) }} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl bg-[#D7885C] text-white transition hover:bg-[#344336]" aria-label={`Delete conversation with ${conversation.participantName}`} title="Delete conversation">
                     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <path d="M3 6h18" />
                       <path d="M8 6V4h8v2" />
@@ -221,6 +247,20 @@ export function ConversationSidebar({
           })}
         </div>
       </section>
+
+      {conversationPendingDeletion && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#344336]/45 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title">
+          <div className="w-full max-w-sm rounded-2xl bg-[#fffdf9] p-6 shadow-xl">
+            <h3 id="delete-conversation-title" className="text-lg font-bold text-[#344336]">Delete conversation?</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Your conversation with {conversationPendingDeletion.participantName} will be deleted.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" disabled={isDeletingConversation} onClick={() => { setConversationIdPendingDeletion(null); setConversationDeleteError('') }} className="rounded-lg border border-[#757A5E]/30 px-4 py-2 text-sm font-semibold text-[#344336] transition hover:bg-[#FABF6B]/15 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isDeletingConversation} onClick={handleConversationDeletion} className="rounded-lg bg-[#D7885C] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#344336] disabled:opacity-50">{isDeletingConversation ? 'Deleting...' : 'Delete'}</button>
+            </div>
+            {conversationDeleteError && <p className="mt-3 text-xs text-[#D7885C]" role="alert">{conversationDeleteError}</p>}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

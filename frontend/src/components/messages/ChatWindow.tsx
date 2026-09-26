@@ -36,7 +36,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }, [conversation?.id, conversation?.messages.length])
 
   if (!conversation) {
-    return <section className="h-[640px] flex-1 bg-[#fcfdfd]" />
+    return <section className="h-[640px] flex-1 bg-[#fffdf9]" />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -77,10 +77,10 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }
 
   return (
-    <section className="flex h-[640px] flex-1 flex-col bg-[#fcfdfd]">
-      <header className="border-b border-slate-100 bg-white px-5 py-4 sm:px-7">
+    <section className="flex h-[640px] flex-1 flex-col bg-[#fffdf9]">
+      <header className="border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-full bg-amber-100 text-sm font-bold text-amber-800">{conversation.participantInitials}</div>
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-[#FABF6B]/40 text-sm font-bold text-[#344336]">{conversation.participantInitials}</div>
           <div>
             <h2 className="font-bold text-slate-900">{conversation.participantName}</h2>
           </div>
@@ -93,9 +93,9 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
           const isEditing = editingMessageId === message.id
           return (
             <div key={message.id} className={`group/action flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-              {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-800">{conversation.participantInitials}</div>}
+              {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FABF6B]/40 text-[10px] font-bold text-[#344336]">{conversation.participantInitials}</div>}
               <div className={`relative w-fit min-w-0 max-w-[78%] pb-7 sm:max-w-[360px] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-teal-700 text-white' : 'rounded-bl-md bg-white text-slate-700 ring-1 ring-slate-100'}`}>
+                <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-[#757A5E] text-white' : 'rounded-bl-md bg-white text-[#344336] ring-1 ring-[#757A5E]/15'}`}>
                   {isEditing ? (
                     <div className="min-w-[220px]">
                       <input value={editingContent} onChange={(event) => setEditingContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveEditing(); if (event.key === 'Escape') setEditingMessageId(null) }} autoFocus className="w-full rounded bg-white/20 px-2 py-1 text-sm outline-none ring-1 ring-white/50" />
@@ -113,7 +113,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   <div className={`absolute bottom-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
                     {reactionOptions.map((emoji) => {
                       const isSelected = message.reactions.some((reaction) => reaction.emoji === emoji && reaction.reactedByCurrentUser)
-                      return <button key={emoji} type="button" aria-pressed={isSelected} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className={`grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-teal-50 ${isSelected ? 'bg-teal-100 ring-1 ring-teal-300' : ''}`}>{emoji}</button>
+                      return <button key={emoji} type="button" aria-pressed={isSelected} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className={`grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-[#FABF6B]/25 ${isSelected ? 'bg-[#FABF6B]/45 ring-1 ring-[#D7885C]' : ''}`}>{emoji}</button>
                     })}
                   </div>
                 </div>
@@ -127,7 +127,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   )}
                 </div>
                 {message.reactions.length > 0 && (
-                  <button type="button" onClick={() => setReactionDetailsMessageId((currentMessageId) => currentMessageId === message.id ? null : message.id)} aria-expanded={reactionDetailsMessageId === message.id} className={`absolute bottom-0 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs transition hover:bg-teal-50 ${isOwnMessage ? 'right-0' : 'left-0'}`}>
+                  <button type="button" onClick={() => setReactionDetailsMessageId((currentMessageId) => currentMessageId === message.id ? null : message.id)} aria-expanded={reactionDetailsMessageId === message.id} className={`absolute bottom-0 flex items-center gap-2 rounded-full border border-[#757A5E]/25 bg-white px-2 py-0.5 text-xs transition hover:bg-[#FABF6B]/15 ${isOwnMessage ? 'right-0' : 'left-0'}`}>
                     {message.reactions.map((reaction) => <span key={reaction.emoji} className="inline-flex items-center gap-1 whitespace-nowrap"><span>{reaction.emoji}</span><span>{reaction.count}</span></span>)}
                   </button>
                 )}
@@ -144,10 +144,10 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         })}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-slate-100 bg-white p-4 sm:px-7 sm:py-5">
+      <form onSubmit={handleSubmit} className="border-t border-[#757A5E]/15 bg-white p-4 sm:px-7 sm:py-5">
         <div className="flex items-end gap-3">
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} readOnly={isSending} rows={1} className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-50" placeholder="Write a message..." />
-          <button type="submit" disabled={isSending} className="h-11 rounded-xl bg-teal-700 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-teal-500">{isSending ? 'Sending...' : 'Send'}</button>
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} readOnly={isSending} rows={1} className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-[#757A5E]/25 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#757A5E] focus:ring-4 focus:ring-[#FABF6B]/20" placeholder="Write a message..." />
+          <button type="submit" disabled={isSending} className="h-11 rounded-xl bg-[#757A5E] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#344336] disabled:cursor-not-allowed disabled:bg-[#757A5E]/60">{isSending ? 'Sending...' : 'Send'}</button>
         </div>
         {sendError && <p className="mt-2 text-xs text-rose-600" role="alert">{sendError}</p>}
       </form>

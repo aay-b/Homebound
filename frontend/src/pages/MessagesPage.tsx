@@ -112,6 +112,11 @@ type MessageUpdate = {
   editedAt: string
 }
 
+type MessageDeletion = {
+  id: string
+  conversationId: string
+}
+
 type AppliedReactionChange = {
   emoji: string
   action: 'added' | 'removed'
@@ -190,6 +195,18 @@ function applyMessageUpdate(conversation: Conversation, update: MessageUpdate): 
   }
 }
 
+function applyMessageDeletion(conversation: Conversation, deletion: MessageDeletion): Conversation {
+  const messages = conversation.messages.filter((message) => message.id !== deletion.id)
+  const latestMessage = messages.at(-1)
+
+  return {
+    ...conversation,
+    messages,
+    lastMessage: latestMessage?.content ?? '',
+    lastMessageTime: latestMessage?.sentAt ?? '',
+  }
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -231,13 +248,23 @@ export function MessagesPage() {
       )))
     }
 
+    const handleMessageDeleted = (deletion: MessageDeletion) => {
+      setConversations((currentConversations) => currentConversations.map((conversation) => (
+        conversation.id === deletion.conversationId
+          ? applyMessageDeletion(conversation, deletion)
+          : conversation
+      )))
+    }
+
     socket.on('message_created', handleMessageCreated)
     socket.on('message_updated', handleMessageUpdated)
+    socket.on('message_deleted', handleMessageDeleted)
     socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
       socket.off('message_created', handleMessageCreated)
       socket.off('message_updated', handleMessageUpdated)
+      socket.off('message_deleted', handleMessageDeleted)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
@@ -305,13 +332,6 @@ export function MessagesPage() {
     }
   }, [currentUserId])
 
-  function updateActiveConversation(updateConversation: (conversation: Conversation) => Conversation) {
-    // Centralize local conversation updates until message mutations use the API.
-    setConversations((currentConversations) => activeConversationId
-      ? currentConversations.map((conversation) => conversation.id === activeConversationId ? updateConversation(conversation) : conversation)
-      : currentConversations)
-  }
-
   function sendMessage(content: string) {
     const socket = socketRef.current
     if (!activeConversationId || !socket || !socket.connected) {
@@ -378,7 +398,23 @@ export function MessagesPage() {
   }
 
   function deleteMessage(messageId: string) {
-    updateActiveConversation((conversation) => ({ ...conversation, messages: conversation.messages.filter((message) => message.id !== messageId) }))
+    const socket = socketRef.current
+    if (!socket || !socket.connected) {
+      console.error(getConnectionError())
+      return
+    }
+
+    socket.timeout(5000).emit(
+      'delete_message',
+      { messageId },
+      (timeoutError: Error | null, response?: { ok: boolean; error?: string; deletion?: MessageDeletion }) => {
+        if (timeoutError || !response?.ok || !response.deletion) {
+          console.error(response?.error ?? 'Unable to delete the message.')
+        }
+
+        // The room event removes the message for both participants, including the sender.
+      },
+    )
   }
 
   function toggleReaction(messageId: string, emoji: string) {

@@ -2,12 +2,13 @@ import type { Server as HttpServer } from 'node:http'
 import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
-import { createMessage, editMessage, toggleMessageReaction, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
+import { createMessage, deleteMessage, editMessage, toggleMessageReaction, type MessageDeletion, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
 
 type JoinConversationAcknowledgement = (response: { ok: boolean; message?: string }) => void
 type SendMessageAcknowledgement = (response: { ok: boolean; error?: string; message?: StoredMessage }) => void
 type ToggleReactionAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageReactionUpdate }) => void
 type EditMessageAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageUpdate }) => void
+type DeleteMessageAcknowledgement = (response: { ok: boolean; error?: string; deletion?: MessageDeletion }) => void
 
 type SendMessagePayload = {
   conversationId: unknown
@@ -22,6 +23,10 @@ type ToggleReactionPayload = {
 type EditMessagePayload = {
   messageId: unknown
   content: unknown
+}
+
+type DeleteMessagePayload = {
+  messageId: unknown
 }
 
 export function userRoom(userId: bigint) {
@@ -69,6 +74,16 @@ function parseEditMessagePayload(value: unknown): { messageId: bigint; content: 
   if (!messageId || typeof payload.content !== 'string') return null
 
   return { messageId, content: payload.content }
+}
+
+function parseDeleteMessagePayload(value: unknown): { messageId: bigint } | null {
+  if (!value || typeof value !== 'object') return null
+
+  const payload = value as DeleteMessagePayload
+  const messageId = toDatabaseId(payload.messageId)
+  if (!messageId) return null
+
+  return { messageId }
 }
 
 export function createSocketServer(httpServer: HttpServer) {
@@ -186,6 +201,36 @@ export function createSocketServer(httpServer: HttpServer) {
         acknowledge?.({ ok: true, update: result.update })
       } catch {
         acknowledge?.({ ok: false, error: 'Unable to edit the message.' })
+      }
+    })
+
+    socket.on('delete_message', async (payloadValue: unknown, acknowledge?: DeleteMessageAcknowledgement) => {
+      try {
+        const payload = parseDeleteMessagePayload(payloadValue)
+        if (!payload) {
+          acknowledge?.({ ok: false, error: 'A valid message ID is required.' })
+          return
+        }
+
+        const result = await deleteMessage(payload.messageId, userId)
+
+        if (result.status === 'message_not_found') {
+          acknowledge?.({ ok: false, error: 'Message was not found.' })
+          return
+        }
+
+        if (result.status === 'not_sender') {
+          acknowledge?.({ ok: false, error: 'Only the sender can delete this message.' })
+          return
+        }
+
+        // The deletion is final and cascades to reactions before viewers receive this event.
+        const room = conversationRoom(BigInt(result.deletion.conversationId))
+        socket.join(room)
+        io.to(room).emit('message_deleted', result.deletion)
+        acknowledge?.({ ok: true, deletion: result.deletion })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to delete the message.' })
       }
     })
 

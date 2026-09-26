@@ -17,6 +17,11 @@ export type MessageUpdate = {
   editedAt: string
 }
 
+export type MessageDeletion = {
+  id: string
+  conversationId: string
+}
+
 export type StoredReaction = {
   emoji: string
   count: number
@@ -63,6 +68,11 @@ type EditMessageResult =
   | { status: 'message_not_found' }
   | { status: 'not_sender' }
   | { status: 'updated'; update: MessageUpdate }
+
+type DeleteMessageResult =
+  | { status: 'message_not_found' }
+  | { status: 'not_sender' }
+  | { status: 'deleted'; deletion: MessageDeletion }
 
 function toStoredMessage(message: {
   id: bigint
@@ -174,6 +184,30 @@ export async function editMessage(
       conversationId: updatedMessage.conversationId.toString(),
       content: updatedMessage.content,
       editedAt: updatedMessage.editedAt!.toISOString(),
+    },
+  }
+}
+
+export async function deleteMessage(
+  messageId: bigint,
+  senderId: bigint,
+): Promise<DeleteMessageResult> {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true, senderId: true },
+  })
+
+  if (!message) return { status: 'message_not_found' }
+  if (message.senderId !== senderId) return { status: 'not_sender' }
+
+  // The MessageReactions foreign key cascades, so deleting the message also removes its reactions.
+  await prisma.message.delete({ where: { id: messageId } })
+
+  return {
+    status: 'deleted',
+    deletion: {
+      id: message.id.toString(),
+      conversationId: message.conversationId.toString(),
     },
   }
 }

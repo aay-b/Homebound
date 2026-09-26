@@ -29,6 +29,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [editingContent, setEditingContent] = useState('')
   const [editError, setEditError] = useState('')
   const [isEditingMessage, setIsEditingMessage] = useState(false)
+  const [messageIdPendingDeletion, setMessageIdPendingDeletion] = useState<string | null>(null)
   const [sendError, setSendError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [dismissedReactionPickerId, setDismissedReactionPickerId] = useState<string | null>(null)
@@ -113,7 +114,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
       </header>
 
-      <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-6 sm:px-7">
+      <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto px-5 pb-6 pt-10 sm:px-7">
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
           const isEditing = editingMessageId === message.id
@@ -137,7 +138,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                       <time dateTime={message.createdAt} className={`mt-1 block text-[10px] ${isOwnMessage ? 'text-right text-white/65' : 'text-left text-slate-400'}`}>{message.sentAt}</time>
                     </>
                   )}
-                  <div className={`absolute bottom-full z-10 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
+                  {/* The transparent bridge preserves hover while the pointer crosses the visual gap. */}
+                  <div className={`absolute bottom-full z-10 mb-2 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg after:absolute after:-bottom-2 after:left-0 after:h-2 after:w-full after:content-[''] ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
                     {reactionOptions.map((emoji) => {
                       const isSelected = message.reactions.some((reaction) => reaction.emoji === emoji && reaction.reactedByCurrentUser)
                       return <button key={emoji} type="button" aria-pressed={isSelected} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className={`grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-[#FABF6B]/25 ${isSelected ? 'bg-[#FABF6B]/45 ring-1 ring-[#D7885C]' : ''}`}>{emoji}</button>
@@ -149,7 +151,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   {isOwnMessage && !isEditing && (
                     <span className="hidden gap-2 group-hover/action:flex">
                       <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>
-                      <button onClick={() => onDeleteMessage(message.id)} className="hover:text-rose-600">Delete</button>
+                        <button onClick={() => setMessageIdPendingDeletion(message.id)} className="hover:text-[#D7885C]">Delete</button>
                     </span>
                   )}
                 </div>
@@ -178,6 +180,19 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
         {sendError && <p className="mt-2 text-xs text-rose-600" role="alert">{sendError}</p>}
       </form>
+
+      {messageIdPendingDeletion && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#344336]/45 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-message-title">
+          <div className="w-full max-w-sm rounded-2xl bg-[#fffdf9] p-6 shadow-xl">
+            <h3 id="delete-message-title" className="text-lg font-bold text-[#344336]">Delete message?</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">This message and its reactions will be deleted.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setMessageIdPendingDeletion(null)} className="rounded-lg border border-[#757A5E]/30 px-4 py-2 text-sm font-semibold text-[#344336] transition hover:bg-[#FABF6B]/15">Cancel</button>
+              <button type="button" onClick={() => { onDeleteMessage(messageIdPendingDeletion); setMessageIdPendingDeletion(null) }} className="rounded-lg bg-[#D7885C] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#344336]">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

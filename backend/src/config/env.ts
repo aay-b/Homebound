@@ -14,6 +14,6 @@ export const env = {
 export function getSupabaseEnv() {
   return {
     supabaseUrl: required('SUPABASE_URL'),
-    supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
+    supabaseSecretKey: required('SUPABASE_SECRET_KEY'),
   }
 }

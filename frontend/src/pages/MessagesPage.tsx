@@ -121,6 +121,27 @@ type ConversationDeletion = {
   id: string
 }
 
+type MessageRequestParticipant = {
+  id: string
+  name: string
+  role: 'user' | 'shelter_staff'
+}
+
+type MessageRequestCreatedEvent = {
+  id: string
+  sender: MessageRequestParticipant
+}
+
+type MessageRequestResolvedEvent = {
+  requestId: string
+  status: 'accepted' | 'declined'
+  recipientId: string
+  conversation?: {
+    id: string
+    participants: MessageRequestParticipant[]
+  }
+}
+
 type AppliedReactionChange = {
   emoji: string
   action: 'added' | 'removed'
@@ -211,6 +232,16 @@ function applyMessageDeletion(conversation: Conversation, deletion: MessageDelet
   }
 }
 
+function toConversationFromParticipants(
+  conversation: NonNullable<MessageRequestResolvedEvent['conversation']>,
+  currentUserId: string,
+): Conversation | null {
+  const participant = conversation.participants.find((member) => member.id !== currentUserId)
+  if (!participant) return null
+
+  return toConversation({ id: conversation.id, participant })
+}
+
 export function MessagesPage() {
   // The path segment supplies a temporary account ID until authentication is available.
   const { demoUserId } = useParams<{ demoUserId: string }>()
@@ -265,10 +296,39 @@ export function MessagesPage() {
       setActiveConversationId((currentConversationId) => currentConversationId === deletion.id ? null : currentConversationId)
     }
 
+    const handleMessageRequestCreated = (request: MessageRequestCreatedEvent) => {
+      setMessageRequests((currentRequests) => (
+        currentRequests.some((currentRequest) => currentRequest.id === request.id)
+          ? currentRequests
+          : [toMessageRequest({ id: request.id, sender: request.sender }), ...currentRequests]
+      ))
+    }
+
+    const handleMessageRequestResolved = (resolution: MessageRequestResolvedEvent) => {
+      setMessageRequests((currentRequests) => currentRequests.filter((request) => request.id !== resolution.requestId))
+      setOutgoingMessageRequests((currentRequests) => currentRequests.filter((request) => request.id !== resolution.requestId))
+
+      if (resolution.status !== 'accepted' || !resolution.conversation) return
+
+      const conversation = toConversationFromParticipants(resolution.conversation, currentUserId)
+      if (!conversation) return
+
+      setConversations((currentConversations) => (
+        currentConversations.some((currentConversation) => currentConversation.id === conversation.id)
+          ? currentConversations
+          : [conversation, ...currentConversations]
+      ))
+
+      // The accepting participant opens the new chat immediately; the sender sees it in the sidebar.
+      if (resolution.recipientId === currentUserId) setActiveConversationId(conversation.id)
+    }
+
     socket.on('message_created', handleMessageCreated)
     socket.on('message_updated', handleMessageUpdated)
     socket.on('message_deleted', handleMessageDeleted)
     socket.on('conversation_deleted', handleConversationDeleted)
+    socket.on('message_request_created', handleMessageRequestCreated)
+    socket.on('message_request_resolved', handleMessageRequestResolved)
     socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
@@ -276,6 +336,8 @@ export function MessagesPage() {
       socket.off('message_updated', handleMessageUpdated)
       socket.off('message_deleted', handleMessageDeleted)
       socket.off('conversation_deleted', handleConversationDeleted)
+      socket.off('message_request_created', handleMessageRequestCreated)
+      socket.off('message_request_resolved', handleMessageRequestResolved)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
@@ -484,7 +546,11 @@ export function MessagesPage() {
 
       if (result.status === 'accepted' && result.conversation) {
         const conversation = toConversation(result.conversation)
-        setConversations((currentConversations) => [conversation, ...currentConversations])
+        setConversations((currentConversations) => (
+          currentConversations.some((currentConversation) => currentConversation.id === conversation.id)
+            ? currentConversations
+            : [conversation, ...currentConversations]
+        ))
         setActiveConversationId(conversation.id)
       }
     } catch (error) {

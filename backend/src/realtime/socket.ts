@@ -3,6 +3,7 @@ import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
 import { deleteConversation, type ConversationDeletion } from '@/modules/messages/conversations.service.js'
+import type { MessageRequestParticipant } from '@/modules/messages/message-requests.service.js'
 import { createMessage, deleteMessage, editMessage, toggleMessageReaction, type MessageDeletion, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
 
 type JoinConversationAcknowledgement = (response: { ok: boolean; message?: string }) => void
@@ -35,6 +36,23 @@ type DeleteConversationPayload = {
   conversationId: unknown
 }
 
+type MessageRequestCreatedEvent = {
+  id: string
+  sender: MessageRequestParticipant
+}
+
+type MessageRequestResolvedEvent = {
+  requestId: string
+  status: 'accepted' | 'declined'
+  recipientId: string
+  conversation?: {
+    id: string
+    participants: MessageRequestParticipant[]
+  }
+}
+
+let messagingSocketServer: Server | null = null
+
 export function userRoom(userId: bigint) {
   // A personal room is reserved for user-specific events such as incoming requests.
   return `user:${userId}`
@@ -43,6 +61,19 @@ export function userRoom(userId: bigint) {
 export function conversationRoom(conversationId: bigint) {
   // Conversation events are broadcast only to members who joined this room.
   return `conversation:${conversationId}`
+}
+
+export function emitMessageRequestCreated(recipientId: bigint, request: MessageRequestCreatedEvent) {
+  messagingSocketServer?.to(userRoom(recipientId)).emit('message_request_created', request)
+}
+
+export function emitMessageRequestResolved(
+  participantIds: bigint[],
+  resolution: MessageRequestResolvedEvent,
+) {
+  participantIds.forEach((participantId) => {
+    messagingSocketServer?.to(userRoom(participantId)).emit('message_request_resolved', resolution)
+  })
 }
 
 function toDatabaseId(value: unknown) {
@@ -109,6 +140,8 @@ export function createSocketServer(httpServer: HttpServer) {
       methods: ['GET', 'POST'],
     },
   })
+
+  messagingSocketServer = io
 
   io.use(async (socket, next) => {
     // Authentication is temporary: the URL-selected demo user is passed during the handshake.

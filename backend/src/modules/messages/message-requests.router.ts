@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { cancelMessageRequest, createMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest } from '@/modules/messages/message-requests.service.js'
+import { emitMessageRequestCreated, emitMessageRequestResolved } from '@/realtime/socket.js'
 
 const createMessageRequestBodySchema = z.object({
   currentUserId: z.string().regex(/^\d+$/).transform((id) => BigInt(id)),
@@ -92,6 +93,11 @@ messageRequestsRouter.post('/', async (request, response, next) => {
       return
     }
 
+    emitMessageRequestCreated(parsedBody.data.recipientId, {
+      id: result.request.id,
+      sender: result.request.sender,
+    })
+
     response.status(201).json({ requestId: result.requestId })
   } catch (error) {
     next(error)
@@ -120,10 +126,26 @@ messageRequestsRouter.post('/:requestId/respond', async (request, response, next
     }
 
     if (result.status === 'declined') {
+      emitMessageRequestResolved(
+        [BigInt(result.senderId), BigInt(result.recipientId)],
+        { requestId: result.requestId, status: 'declined', recipientId: result.recipientId },
+      )
       response.json({ status: 'declined' })
       return
     }
 
+    emitMessageRequestResolved(
+      [BigInt(result.senderId), BigInt(result.recipientId)],
+      {
+        requestId: result.requestId,
+        status: 'accepted',
+        recipientId: result.recipientId,
+        conversation: {
+          id: result.conversation.id,
+          participants: result.conversation.participants,
+        },
+      },
+    )
     response.json({ status: 'accepted', conversation: result.conversation })
   } catch (error) {
     next(error)

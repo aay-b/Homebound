@@ -42,7 +42,7 @@ type OutgoingMessageRequestsResult =
 
 type CancelMessageRequestResult =
   | { status: 'not_found' }
-  | { status: 'cancelled' }
+  | { status: 'cancelled'; requestId: string; recipientId: string }
 
 type RespondToMessageRequestResult =
   | { status: 'not_found' }
@@ -155,7 +155,7 @@ export async function getOutgoingMessageRequests(senderId: bigint): Promise<Outg
 export async function cancelMessageRequest(requestId: bigint, senderId: bigint): Promise<CancelMessageRequestResult> {
   const request = await prisma.messageRequest.findFirst({
     where: { id: requestId, senderId, status: 'pending' },
-    select: { id: true },
+    select: { id: true, recipientId: true },
   })
 
   if (!request) return { status: 'not_found' }
@@ -165,7 +165,11 @@ export async function cancelMessageRequest(requestId: bigint, senderId: bigint):
     where: { id: request.id },
   })
 
-  return { status: 'cancelled' }
+  return {
+    status: 'cancelled',
+    requestId: request.id.toString(),
+    recipientId: request.recipientId.toString(),
+  }
 }
 
 export async function respondToMessageRequest(

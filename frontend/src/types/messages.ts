@@ -30,6 +30,7 @@ export type Conversation = {
 
 export type MessageRequest = {
   id: string
+  personId: string
   name: string
   initials: string
   note: string

@@ -76,6 +76,11 @@ export function emitMessageRequestResolved(
   })
 }
 
+export function emitMessageRequestCancelled(recipientId: bigint, requestId: string) {
+  // Only the recipient needs this event because the sender already removed it locally after the REST call.
+  messagingSocketServer?.to(userRoom(recipientId)).emit('message_request_cancelled', { requestId })
+}
+
 function toDatabaseId(value: unknown) {
   // Socket payloads are untrusted strings, so reject values that cannot be safe database IDs.
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return null

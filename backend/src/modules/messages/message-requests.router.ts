@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { cancelMessageRequest, createMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest } from '@/modules/messages/message-requests.service.js'
-import { emitMessageRequestCreated, emitMessageRequestResolved } from '@/realtime/socket.js'
+import { emitMessageRequestCancelled, emitMessageRequestCreated, emitMessageRequestResolved } from '@/realtime/socket.js'
 
 const createMessageRequestBodySchema = z.object({
   currentUserId: z.string().regex(/^\d+$/).transform((id) => BigInt(id)),
@@ -169,6 +169,7 @@ messageRequestsRouter.post('/:requestId/cancel', async (request, response, next)
       return
     }
 
+    emitMessageRequestCancelled(BigInt(result.recipientId), result.requestId)
     response.json({ status: 'cancelled' })
   } catch (error) {
     next(error)

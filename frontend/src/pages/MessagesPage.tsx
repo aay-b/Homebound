@@ -35,6 +35,7 @@ function toConversation(preview: ConversationPreview): Conversation {
 function toMessageRequest(request: IncomingMessageRequest): MessageRequest {
   return {
     id: request.id,
+    personId: request.sender.id,
     name: request.sender.name,
     initials: getInitials(request.sender.name),
     note: request.sender.role === 'shelter_staff' ? 'Shelter staff' : 'User',
@@ -44,6 +45,7 @@ function toMessageRequest(request: IncomingMessageRequest): MessageRequest {
 function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageRequest {
   return {
     id: request.id,
+    personId: request.recipient.id,
     name: request.recipient.name,
     initials: getInitials(request.recipient.name),
     note: request.recipient.role === 'shelter_staff' ? 'Shelter staff' : 'User',
@@ -140,6 +142,10 @@ type MessageRequestResolvedEvent = {
     id: string
     participants: MessageRequestParticipant[]
   }
+}
+
+type MessageRequestCancelledEvent = {
+  requestId: string
 }
 
 type AppliedReactionChange = {
@@ -249,6 +255,7 @@ export function MessagesPage() {
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
   const [outgoingMessageRequests, setOutgoingMessageRequests] = useState(initialRequests)
+  const [resolvedOutgoingRequest, setResolvedOutgoingRequest] = useState<{ requestId: string; recipientId: string } | null>(null)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
@@ -308,6 +315,10 @@ export function MessagesPage() {
       setMessageRequests((currentRequests) => currentRequests.filter((request) => request.id !== resolution.requestId))
       setOutgoingMessageRequests((currentRequests) => currentRequests.filter((request) => request.id !== resolution.requestId))
 
+      if (resolution.recipientId !== currentUserId) {
+        setResolvedOutgoingRequest({ requestId: resolution.requestId, recipientId: resolution.recipientId })
+      }
+
       if (resolution.status !== 'accepted' || !resolution.conversation) return
 
       const conversation = toConversationFromParticipants(resolution.conversation, currentUserId)
@@ -323,12 +334,17 @@ export function MessagesPage() {
       if (resolution.recipientId === currentUserId) setActiveConversationId(conversation.id)
     }
 
+    const handleMessageRequestCancelled = (cancellation: MessageRequestCancelledEvent) => {
+      setMessageRequests((currentRequests) => currentRequests.filter((request) => request.id !== cancellation.requestId))
+    }
+
     socket.on('message_created', handleMessageCreated)
     socket.on('message_updated', handleMessageUpdated)
     socket.on('message_deleted', handleMessageDeleted)
     socket.on('conversation_deleted', handleConversationDeleted)
     socket.on('message_request_created', handleMessageRequestCreated)
     socket.on('message_request_resolved', handleMessageRequestResolved)
+    socket.on('message_request_cancelled', handleMessageRequestCancelled)
     socket.on('message_reaction_updated', handleReactionUpdated)
 
     return () => {
@@ -338,6 +354,7 @@ export function MessagesPage() {
       socket.off('conversation_deleted', handleConversationDeleted)
       socket.off('message_request_created', handleMessageRequestCreated)
       socket.off('message_request_resolved', handleMessageRequestResolved)
+      socket.off('message_request_cancelled', handleMessageRequestCancelled)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.disconnect()
       socketRef.current = null
@@ -383,6 +400,7 @@ export function MessagesPage() {
 
     // Clear the previous account's selected thread before loading its messaging data.
     setActiveConversationId(null)
+    setResolvedOutgoingRequest(null)
 
     Promise.all([
       getIncomingMessageRequests(currentUserId),
@@ -564,6 +582,7 @@ export function MessagesPage() {
       setOutgoingMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
     } catch (error) {
       console.error('Unable to cancel the outgoing message request.', error)
+      throw error
     }
   }
 
@@ -586,7 +605,7 @@ export function MessagesPage() {
           <span className="grid h-9 w-9 place-items-center rounded-full bg-[#757A5E] text-sm font-bold text-white ring-1 ring-[#FABF6B]/50" aria-label="Open profile">U</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex">
-          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
         </div>
       </div>

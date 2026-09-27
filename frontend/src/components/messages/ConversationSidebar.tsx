@@ -9,9 +9,10 @@ type ConversationSidebarProps = {
   activeConversationId: string | null
   messageRequests: MessageRequest[]
   outgoingMessageRequests: MessageRequest[]
+  resolvedOutgoingRequest?: { requestId: string; recipientId: string } | null
   onConversationSelect: (conversationId: string) => void
   onRequestAction: (requestId: string, action: 'accept' | 'decline') => void
-  onCancelOutgoingRequest: (requestId: string) => void
+  onCancelOutgoingRequest: (requestId: string) => Promise<void>
   onOutgoingRequestCreated: (request: MessageRequest) => void
   onConversationDelete: (conversationId: string) => Promise<{ ok: boolean; error?: string }>
 }
@@ -22,6 +23,7 @@ export function ConversationSidebar({
   activeConversationId,
   messageRequests,
   outgoingMessageRequests,
+  resolvedOutgoingRequest,
   onConversationSelect,
   onRequestAction,
   onCancelOutgoingRequest,
@@ -54,6 +56,17 @@ export function ConversationSidebar({
     setRequestError('')
     setSentRecipientIds(new Set())
   }, [currentUserId])
+
+  useEffect(() => {
+    if (!resolvedOutgoingRequest) return
+
+    // A declined or accepted request no longer blocks a new request in this browser session.
+    setSentRecipientIds((currentIds) => {
+      const nextIds = new Set(currentIds)
+      nextIds.delete(resolvedOutgoingRequest.recipientId)
+      return nextIds
+    })
+  }, [resolvedOutgoingRequest])
 
   useEffect(() => {
     const query = searchQuery.trim()
@@ -99,6 +112,7 @@ export function ConversationSidebar({
       setSentRecipientIds((currentIds) => new Set([...currentIds, person.id]))
       onOutgoingRequestCreated({
         id: requestId,
+        personId: person.id,
         name: person.name,
         initials: person.name.split(' ').map((name) => name[0]).join('').slice(0, 2),
         note: person.role === 'shelter_staff' ? 'Shelter staff' : 'User',
@@ -130,6 +144,21 @@ export function ConversationSidebar({
       setConversationDeleteError('Unable to delete the conversation.')
     } finally {
       setIsDeletingConversation(false)
+    }
+  }
+
+  async function handleCancelRequest(request: MessageRequest) {
+    try {
+      await onCancelOutgoingRequest(request.id)
+
+      // A cancelled recipient is immediately eligible for another request in this search session.
+      setSentRecipientIds((currentIds) => {
+        const nextIds = new Set(currentIds)
+        nextIds.delete(request.personId)
+        return nextIds
+      })
+    } catch {
+      // The parent keeps the request visible when cancellation fails, so no local rollback is needed.
     }
   }
 
@@ -208,7 +237,7 @@ export function ConversationSidebar({
                     <p className="truncate text-sm font-bold text-slate-800">{request.name}</p>
                     <p className="truncate text-xs text-slate-500">Pending · {request.note}</p>
                   </div>
-                  <button type="button" onClick={() => onCancelOutgoingRequest(request.id)} className="rounded-lg bg-[#D7885C]/15 px-2 py-1.5 text-xs font-bold text-[#A95F3D] transition hover:bg-[#D7885C]/25">Cancel</button>
+                  <button type="button" onClick={() => handleCancelRequest(request)} className="rounded-lg bg-[#D7885C]/15 px-2 py-1.5 text-xs font-bold text-[#A95F3D] transition hover:bg-[#D7885C]/25">Cancel</button>
                 </div>
               </div>
             ))}

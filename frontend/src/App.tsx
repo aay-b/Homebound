@@ -1,11 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-<<<<<<< HEAD
 import ApplicationDashboard from "./pages/ApplicationDashboard";
 import ApplicationView from "./pages/ApplicationView";
 
-=======
->>>>>>> main
 export function App() {
     return (
         <BrowserRouter>
@@ -18,12 +15,8 @@ export function App() {
                     }
                 />
 
-<<<<<<< HEAD
-                <Route path="/applications/:userId" element={<ApplicationDashboard/>}/>
-                <Route path="/applications/view/:userId" element={<ApplicationView/>}/>
-=======
-                {/* <Route path="/URL ADD-ON" element={<PAGE FUNCTION IMPORTED/>}/> */}
->>>>>>> main
+                <Route path="/applications" element={<ApplicationDashboard/>}/>
+                <Route path="/applications/:applicationId" element={<ApplicationView/>}/>
 
             </Routes>
         </BrowserRouter>

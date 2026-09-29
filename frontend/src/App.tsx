@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import ApplicationDashboard from "./pages/ApplicationDashboard";
+import ApplicationView from "./pages/ApplicationView";
+
 export function App() {
     return (
         <BrowserRouter>
@@ -12,7 +15,8 @@ export function App() {
                     }
                 />
 
-                {/* <Route path="/URL ADD-ON" element={<PAGE FUNCTION IMPORTED/>}/> */}
+                <Route path="/applications/:userId" element={<ApplicationDashboard/>}/>
+                <Route path="/applications/view/:userId" element={<ApplicationView/>}/>
 
             </Routes>
         </BrowserRouter>

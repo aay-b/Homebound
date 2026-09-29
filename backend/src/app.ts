@@ -1,8 +1,15 @@
 import cors from 'cors'
 import express from 'express'
 import { env } from '@/config/env.js'
+import applicationRoutes from './modules/Applications/routes/applications.js'
 
 export const app = express()
+
 app.use(cors({ origin: env.clientOrigin }))
 app.use(express.json())
-app.get('/api/health', (_request, response) => response.json({ status: 'ok' }))
+
+app.get('/api/health', (_request, response) =>
+    response.json({ status: 'ok' })
+)
+
+app.use('/api', applicationRoutes)

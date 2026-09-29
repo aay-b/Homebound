@@ -6,7 +6,14 @@ function ApplicationDashboard() {
     type Application = {
         id: number;
         listing_id: number;
+        listing: {
+            pet_name: string;
+            shelter: {
+                shelter_name: string;
+            };
+        };
         application_status: string;
+        commitment_question: boolean;
         created_at: string;
         submitted_at: string | null;
     };
@@ -16,8 +23,7 @@ function ApplicationDashboard() {
 
     useEffect(() => {
         async function fetchApplications() {
-            const userId = 1;
-            const response = await fetch(`http://localhost:3000/api/applications/${userId}`);
+            const response = await fetch(`http://localhost:3000/api/applications/`);
 
             const result = await response.json();
             setApplications(result.data);
@@ -78,11 +84,11 @@ function ApplicationDashboard() {
 
                             <div className="flex-1">
                                 <h2 className="text-xl font-semibold">
-                                    PET NAME
+                                    {application.listing.pet_name}
                                 </h2>
 
                                 <p className="text-sm text-stone-500">
-                                    SHELTER NAME
+                                    {application.listing.shelter.shelter_name}
                                 </p>
 
                                 <button

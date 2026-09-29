@@ -14,13 +14,21 @@ function ApplicationView() {
     type Application = {
         id: number;
         listing_id: number;
+        listing: {
+            pet_name: string;
+            shelter: {
+                shelter_name: string;
+            };
+        };
         application_status: string;
+        commitment_question: boolean;
         created_at: string;
         submitted_at: string | null;
     };
 
     const { applicationId } = useParams();
 
+    const [commitment, setCommitment] = useState(false);
     const [application, setApplication] = useState<Application>();
     const [responses, setResponses] = useState<Response[]>([]);
 
@@ -35,7 +43,7 @@ function ApplicationView() {
             );
 
             const result = await response.json();
-            setApplication(result.data);
+            setApplication(result.data[0]);
         }
 
         fetchApplication();
@@ -64,7 +72,7 @@ function ApplicationView() {
 
                 <div className="mb-4 flex items-center justify-between">
                     <h1 className="text-3xl font-semibold">
-                        Application for PET NAME
+                        Application for {application?.listing.pet_name}
                     </h1>
                 </div>
 
@@ -84,6 +92,29 @@ function ApplicationView() {
                                 </p>
                             </div>
                         ))}
+                    </div>
+                    <div className="mt-6">
+                        <label className="flex items-start gap-3 rounded-2xl border border-stone-300 bg-white p-5">
+                            <input
+                                type="checkbox"
+                                checked={commitment}
+                                onChange={(event) => setCommitment(event.target.checked)}
+                                className="mt-1"
+                            />
+
+                            <span>
+                                Will you commit to taking proper care of this pet?
+                            </span>
+                        </label>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            className="rounded-xl bg-stone-900 px-6 py-3 font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:bg-stone-300"
+                            disabled={!commitment}
+                        >
+                            Submit Application
+                        </button>
                     </div>
                 </section>
 

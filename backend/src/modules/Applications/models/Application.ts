@@ -14,11 +14,17 @@ class Application {
             .from("Applications")
             .select(`
                 id,
-                applicant_id,
                 listing_id,
+                listing:listing_id (
+                    pet_name,
+                    shelter:shelter_id (
+                        shelter_name
+                    )
+                ),
                 user_notes,
                 application_status,
                 decision_feedback,
+                commitment_question,
                 created_at,
                 submitted_at
             `)
@@ -54,11 +60,17 @@ class Application {
             .from("Applications")
             .select(`
                 id,
-                applicant_id,
                 listing_id,
+                listing:listing_id (
+                    pet_name,
+                    shelter:shelter_id (
+                        shelter_name
+                    )
+                ),
                 user_notes,
                 application_status,
                 decision_feedback,
+                commitment_question,
                 created_at,
                 submitted_at
             `)

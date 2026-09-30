@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { useState } from "react";
-import { saveProfile } from "../services/authService";
+import { useEffect, useState } from "react";
+import { getProfile, saveProfile } from "../services/authService";
 
 export default function Profile() {
     const { user } = useAuth();
@@ -10,6 +10,23 @@ export default function Profile() {
     const [address, setAddress] = useState("");
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+    const loadProfile = async () => {
+        const result = await getProfile();
+
+            if (result.response.ok) {
+                setName(result.data.profile.name);
+                setPhone(result.data.profile.phone ?? "");
+                setAddress(result.data.profile.address ?? "");
+            }
+
+            setLoading(false);
+        };
+
+        loadProfile();
+    }, []);
 
     const handleSave = async () => {
         setError("");
@@ -27,6 +44,16 @@ export default function Profile() {
 
         setSuccess("Profile saved successfully!");
     };
+
+    if (loading) {
+    return (
+            <main className="min-h-screen bg-stone-50 text-stone-900">
+                <div className="flex min-h-screen items-center justify-center">
+                    <p className="text-stone-600">Loading profile...</p>
+                </div>
+            </main>
+        );
+    }   
 
     return (
         <main className="min-h-screen bg-stone-50 text-stone-900">

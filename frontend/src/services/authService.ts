@@ -87,3 +87,32 @@ export async function saveProfile(
         data,
     };
 }
+
+export async function getProfile() {
+    const {
+        data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+        return {
+            response: new Response(null, { status: 401 }),
+            data: {
+                message: "You must be logged in",
+            },
+        };
+    }
+
+    const response = await fetch("http://localhost:3000/api/profile", {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${session.access_token}`,
+        },
+    });
+
+    const data = await response.json();
+
+    return {
+        response,
+        data,
+    };
+}

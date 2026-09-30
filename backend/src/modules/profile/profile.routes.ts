@@ -7,8 +7,33 @@ export const profileRouter = Router();
 
 const profileSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
-    phone: z.string().optional(),
+    phone: z
+        .string()
+        .regex(
+            /^[0-9+\-() ]{7,20}$/,
+            "Please enter a valid phone number"
+        )
+        .optional()
+        .or(z.literal("")),
     address: z.string().optional(),
+});
+
+profileRouter.get("/", requireAuth, async (request, response) => {
+    const profile = await prisma.profile.findUnique({
+        where: {
+            userId: request.user.id,
+        },
+    });
+
+    if (!profile) {
+        return response.status(404).json({
+            message: "Profile not found",
+        });
+    }
+
+    return response.status(200).json({
+        profile,
+    });
 });
 
 profileRouter.put("/", requireAuth, async (request, response) => {

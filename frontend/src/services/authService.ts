@@ -52,7 +52,8 @@ export async function loginUser(
 export async function saveProfile(
     name: string,
     phone: string,
-    address: string
+    address: string,
+    profilePicturePath?: string
 ) {
     const {
         data: { session },
@@ -77,6 +78,7 @@ export async function saveProfile(
             name,
             phone,
             address,
+            profilePicturePath,
         }),
     });
 
@@ -114,5 +116,44 @@ export async function getProfile() {
     return {
         response,
         data,
+    };
+}
+
+export async function uploadProfilePicture(file: File) {
+    const {
+        data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+        return {
+            success: false,
+            message: "You must be logged in",
+        };
+    }
+
+    const userId = session.user.id;
+
+    const fileExtension = file.name.split(".").pop();
+    const filePath = `${userId}/profile-picture.${fileExtension}`;
+
+    const { error } = await supabase.storage
+        .from("profile-pictures")
+        .upload(filePath, file, {
+            upsert: true,
+            contentType: file.type,
+        });
+
+    if (error) {
+        console.error("Profile picture upload error:", error);
+
+        return {
+            success: false,
+            message: "Unable to upload profile picture",
+        };
+    }
+
+    return {
+        success: true,
+        path: filePath,
     };
 }

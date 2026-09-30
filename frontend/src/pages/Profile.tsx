@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { useEffect, useState } from "react";
-import { getProfile, saveProfile } from "../services/authService";
+import { ChangeEvent, useEffect, useState } from "react";
+import { getProfile, saveProfile, uploadProfilePicture } from "../services/authService";
+import { supabase } from "../config/supabase";
 
 export default function Profile() {
     const { user } = useAuth();
@@ -11,6 +12,17 @@ export default function Profile() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [loading, setLoading] = useState(true);
+    const [profilePicture, setProfilePicture] = useState<File | null>(null);
+    const [profilePicturePath, setProfilePicturePath] = useState<string | undefined>();
+    const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+
+    function handlePictureChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+
+        if (file) {
+            setProfilePicture(file);
+        }
+    }   
 
     useEffect(() => {
     const loadProfile = async () => {
@@ -20,6 +32,18 @@ export default function Profile() {
                 setName(result.data.profile.name);
                 setPhone(result.data.profile.phone ?? "");
                 setAddress(result.data.profile.address ?? "");
+
+                const picturePath = result.data.profile.profilePicturePath;
+
+                if (picturePath) {
+                    const { data } = await supabase.storage
+                        .from("profile-pictures")
+                        .createSignedUrl(picturePath, 60 * 60);
+
+                    if (data?.signedUrl) {
+                        setProfilePictureUrl(data.signedUrl);
+                    }
+                }
             }
 
             setLoading(false);
@@ -32,7 +56,21 @@ export default function Profile() {
         setError("");
         setSuccess("");
 
-        const result = await saveProfile(name, phone, address);
+        let picturePath = profilePicturePath;
+
+        if (profilePicture) {
+            const uploadResult = await uploadProfilePicture(profilePicture);
+
+            if (!uploadResult.success) {
+                setError(uploadResult.message);
+                return;
+            }
+
+            picturePath = uploadResult.path;
+        }
+
+
+        const result = await saveProfile(name, phone, address, picturePath);
 
         if (!result.response.ok) {
             const firstError =
@@ -87,6 +125,49 @@ export default function Profile() {
 
                 <div className="rounded-2xl bg-white p-8 shadow-sm">
                     <div className="space-y-6">
+
+                        <div className="flex items-center justify-between border-b border-stone-200 pb-6">
+                            <div>
+                                <p className="text-sm font-medium">
+                                    Profile picture
+                                </p>
+                                <p className="mt-1 text-sm text-stone-500">
+                                    Choose a picture for your profile
+                                </p>
+                            </div>
+
+                            <div className="relative h-24 w-24">
+                                {profilePictureUrl ? (
+                                    <img
+                                        src={profilePictureUrl}
+                                        alt="Profile"
+                                        className="h-24 w-24 rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-stone-200 text-sm text-stone-500">
+                                        No photo
+                                    </div>
+                                )}
+
+                                <label
+                                    htmlFor="profile-picture"
+                                    className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-stone-900 text-white shadow-md transition hover:bg-stone-700"
+                                    title="Change profile picture"
+                                >
+                                    📷
+                                </label>
+
+                                <input
+                                    id="profile-picture"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    onChange={handlePictureChange}
+                                    className="hidden"
+                                />
+                            </div>
+                        </div>
+
+
                         <div>
                             <label className="mb-2 block text-sm font-medium">
                                 Name

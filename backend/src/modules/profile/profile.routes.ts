@@ -16,6 +16,7 @@ const profileSchema = z.object({
         .optional()
         .or(z.literal("")),
     address: z.string().optional(),
+    profilePicturePath: z.string().optional(),
 });
 
 profileRouter.get("/", requireAuth, async (request, response) => {
@@ -46,7 +47,7 @@ profileRouter.put("/", requireAuth, async (request, response) => {
         });
     }
 
-    const { name, phone, address } = result.data;
+    const { name, phone, address, profilePicturePath } = result.data;
 
     const profile = await prisma.profile.upsert({
         where: {
@@ -56,12 +57,14 @@ profileRouter.put("/", requireAuth, async (request, response) => {
             name,
             phone,
             address,
+            profilePicturePath
         },
         create: {
             userId: request.user.id,
             name,
             phone,
             address,
+            profilePicturePath
         },
     });
 

@@ -5,7 +5,7 @@ import Application from "../models/Application.js";
 
 const router = Router();
 
-// Get all of a user's applications info
+// Get info for all of a user's applications
 router.get("/applications", async (req, res) => {
     try {
         const userId = 1;

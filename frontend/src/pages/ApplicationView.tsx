@@ -67,42 +67,50 @@ function ApplicationView() {
     }, [applicationId]);
 
     return (
-        <main className="min-h-screen bg-stone-50 px-6 py-12">
+        <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
             <div className="mx-auto max-w-5xl">
 
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4">
                     <h1 className="text-3xl font-semibold">
                         Application for {application?.listing.pet_name}
                     </h1>
+
+                    <p className="mt-1 text-sm text-[#5F6258]">
+                        {application?.listing.shelter.shelter_name}
+                    </p>
                 </div>
 
-                <section className="min-h-96 rounded-2xl border border-stone-300 p-6">
+                <section className="min-h-96 rounded-2xl bg-[#ECEBE4] p-6">
+
                     <div className="space-y-4">
                         {responses.map((response) => (
                             <div
                                 key={response.id}
-                                className="rounded-2xl border border-stone-300 bg-white p-5"
+                                className="rounded-2xl border border-[#757A5E] bg-white p-5"
                             >
-                                <p className="font-semibold">
+                                <p className="font-semibold text-[#111111]">
                                     Q: {response.question_id.question}
                                 </p>
 
-                                <p className="mt-2 text-stone-700">
+                                <p className="mt-2 text-[#5F6258]">
                                     A: {response.response}
                                 </p>
                             </div>
                         ))}
                     </div>
+
                     <div className="mt-6">
-                        <label className="flex items-start gap-3 rounded-2xl border border-stone-300 bg-white p-5">
+                        <label className="flex items-start gap-3 rounded-2xl border border-[#757A5E] bg-white p-5">
                             <input
                                 type="checkbox"
                                 checked={commitment}
-                                onChange={(event) => setCommitment(event.target.checked)}
+                                onChange={(event) =>
+                                    setCommitment(event.target.checked)
+                                }
                                 className="mt-1"
                             />
 
-                            <span>
+                            <span className="text-[#111111]">
                                 Will you commit to taking proper care of this pet?
                             </span>
                         </label>
@@ -110,12 +118,13 @@ function ApplicationView() {
 
                     <div className="mt-4 flex justify-end">
                         <button
-                            className="rounded-xl bg-stone-900 px-6 py-3 font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:bg-stone-300"
+                            className="rounded-xl bg-[#344336] px-6 py-3 font-medium text-white hover:bg-[#2B382D] disabled:cursor-not-allowed disabled:bg-[#A9ADA4]"
                             disabled={!commitment}
                         >
                             Submit Application
                         </button>
                     </div>
+
                 </section>
 
             </div>

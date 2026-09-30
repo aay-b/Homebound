@@ -91,4 +91,91 @@ router.get("/applications/view/:applicationId", async (req, res) => {
     });
 });
 
+
+// Saves a person's responses within an application
+router.patch("/applications/:applicationId/save", async (req, res) => {
+    try {
+        const applicationId = Number(req.params.applicationId);
+        const { responses, commitment_question } = req.body;
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid application ID"
+            });
+        }
+
+        const { error } = await Application.saveChanges(
+            supabase,
+            applicationId,
+            responses,
+            commitment_question
+        );
+
+        if (error) {
+            console.error("Save error:", error);
+
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Application saved successfully"
+        });
+
+    } catch (error) {
+        console.error("Save application error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+});
+
+
+// Submits a specific application
+router.patch("/applications/:applicationId/submit", async (req, res) => {
+    try {
+        const applicationId = Number(req.params.applicationId);
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid application ID"
+            });
+        }
+
+        const { error } = await Application.submitApplication(
+            supabase,
+            applicationId,
+        );
+
+        if (error) {
+            console.error("Save error:", error);
+
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Application submitted successfully"
+        });
+
+    } catch (error) {
+        console.error("Application submission error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+});
+
 export default router;

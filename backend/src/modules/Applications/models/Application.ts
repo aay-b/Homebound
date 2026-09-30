@@ -126,6 +126,80 @@ class Application {
             error: null,
         };
     }
+
+
+    static async saveChanges(supabase: SupabaseClient, applicationId: number, responses: { id: number; response: string }[], commitment: boolean) {
+        
+        const { data: application, error: lookupError } = await supabase
+            .from("Applications")
+            .select("application_status")
+            .eq("id", applicationId)
+            .single();
+
+        if (lookupError) {
+            return { error: lookupError };
+        }
+
+        if (application.application_status !== "In Progress") {
+            return {
+                error: new Error("This application's status has changed, and can no longer be edited")
+            };
+        }
+
+        for (const item of responses) {
+            const { data, error } = await supabase
+                .from("ApplicationResponses")
+                .update({ response: item.response })
+                .eq("id", item.id)
+                .eq("application_id", applicationId)
+
+            if (error) {
+                return { error };
+            }
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update({ commitment_question: commitment })
+            .eq("id", applicationId)
+
+        if (error) {
+            return { error };
+        }
+
+        return { error: null };
+    }
+
+
+    static async submitApplication(supabase: SupabaseClient, applicationId: number) {
+            
+        const { data: application, error: lookupError } = await supabase
+            .from("Applications")
+            .select("application_status")
+            .eq("id", applicationId)
+            .single();
+
+        if (lookupError) {
+            return { error: lookupError };
+        }
+
+        if (application.application_status !== "In Progress") {
+            return {
+                error: new Error("This application's status has already been changed.")
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update({ application_status: "Pending" })
+            .eq("id", applicationId)
+
+        if (error) {
+            return { error };
+        }
+
+        return { error: null };
+    }
 }
 
 export default Application;

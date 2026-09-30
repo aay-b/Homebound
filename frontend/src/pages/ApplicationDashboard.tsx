@@ -109,16 +109,16 @@ function ApplicationDashboard() {
                                         </button>
                                     </div>
 
-                                    <div className="flex shrink-0 flex-col items-center justify-center">
+                                    <div className="flex w-36 shrink-0 flex-col items-center justify-center">
                                         <span
-                                            className={`rounded-full border px-5 py-2 text-sm font-medium capitalize ${applyStatusColor(
+                                            className={`w-full rounded-full border px-4 py-2 text-center text-sm font-medium capitalize ${applyStatusColor(
                                                 application.application_status
                                             )}`}
                                         >
                                             {application.application_status}
                                         </span>
 
-                                        <p className="mt-2 text-xs text-[#5F6258]">
+                                        <p className="mt-2 text-center text-xs text-[#5F6258]">
                                             {application.submitted_at
                                                 ? `Submitted ${new Date(application.submitted_at).toLocaleDateString()}`
                                                 : `Started ${new Date(application.created_at).toLocaleDateString()}`}

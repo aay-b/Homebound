@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
+import { AuthProvider } from "./contexts/AuthContext";
 
 export function App() {
     return (
+        <AuthProvider>
         <BrowserRouter>
             <Routes>
                 <Route path="/"
@@ -21,5 +23,6 @@ export function App() {
 
             </Routes>
         </BrowserRouter>
+        </AuthProvider>
     );
 }

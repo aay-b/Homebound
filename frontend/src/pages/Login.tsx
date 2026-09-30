@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { loginUser } from "../services/authService";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../config/supabase";
 
 export default function Login() {
+    const { setUser } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -25,6 +28,12 @@ export default function Login() {
             return;
         }
 
+        await supabase.auth.setSession({
+            access_token: result.data.session.access_token,
+            refresh_token: result.data.session.refresh_token,
+        });
+
+        setUser(result.data.user);
         setSuccess("Login successful!");
     };
 

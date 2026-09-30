@@ -21,6 +21,7 @@ function ApplicationView() {
             };
         };
         application_status: string;
+        decision_feedback: string;
         commitment_question: boolean;
         created_at: string;
         submitted_at: string | null;
@@ -156,18 +157,71 @@ function ApplicationView() {
         }
     }
 
+    function applyStatusColor(status: string) {
+        switch (status) {
+            case "In Progress":
+                return "bg-blue-200 text-blue-800 border-blue-400";
+
+            case "Pending":
+                return "bg-yellow-200 text-yellow-800 border-yellow-400";
+
+            case "Approved":
+                return "bg-green-200 text-green-800 border-green-400";
+
+            case "Denied":
+                return "bg-red-200 text-red-800 border-red-400";
+
+            case "Withdrawn":
+                return "bg-stone-200 text-stone-800 border-stone-400";
+
+            case "Passed":
+                return "bg-stone-200 text-stone-800 border-stone-400";
+
+            default:
+                return "bg-stone-200 text-stone-800 border-stone-400";
+        }
+    }
+
+    function applyFeedbackStyle(status: string) {
+        switch (status) {
+            case "Approved":
+                return "border-green-400 bg-green-50 text-green-900";
+
+            case "Denied":
+                return "border-red-400 bg-red-50 text-red-900";
+
+            default:
+                return "border-[#757A5E] bg-[#F7F6F2] text-[#111111]";
+        }
+    }
+
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
             <div className="mx-auto max-w-5xl">
 
-                <div className="mb-4">
-                    <h1 className="text-3xl font-semibold">
-                        Application for {application?.listing.pet_name}
-                    </h1>
+                <div className="mb-4 flex items-start justify-between">
+                    <div>
+                        <h1 className="text-3xl font-semibold">
+                            Application for {application?.listing.pet_name}
+                        </h1>
 
-                    <p className="mt-1 text-sm text-[#5F6258]">
-                        {application?.listing.shelter.shelter_name}
-                    </p>
+                        <p className="mt-1 text-sm text-[#5F6258]">
+                            {application?.listing.shelter.shelter_name}
+                        </p>
+                    </div>
+
+                    {application ? (
+                        <div
+                            className={`rounded-lg border px-4 py-2 text-sm font-medium ${applyStatusColor(
+                                application.application_status
+                            )}`}
+                        >
+                            <span className="font-normal opacity-75">
+                                Status:
+                            </span>{" "}
+                            {application.application_status}
+                        </div>
+                    ) : null}
                 </div>
 
                 <section className="min-h-96 rounded-2xl bg-[#ECEBE4] p-6">
@@ -225,7 +279,21 @@ function ApplicationView() {
                             </span>
                         </label>
                     </div>
+                    {application?.application_status === "Approved" || application?.application_status === "Denied" ? (
+                        <div className="mt-16">
+                            <p className="text-center text-sm text-[#5F6258]">
+                                Shelter staff have given this feedback regarding your application:
+                            </p>
 
+                            <div
+                                className={`mt-3 w-full rounded-xl border-2 p-4 shadow-sm ${applyFeedbackStyle(
+                                    application.application_status
+                                )}`}
+                            >
+                                {application.decision_feedback}
+                            </div>
+                        </div>
+                    ) : null}
                     {application?.application_status === "In Progress" ? (
                         <div className="mt-4 flex items-center justify-between">
                             <div className="flex flex-col">

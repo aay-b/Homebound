@@ -1,8 +1,32 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useState } from "react";
+import { saveProfile } from "../services/authService";
 
 export default function Profile() {
     const { user } = useAuth();
+    const [name, setName] = useState("");
+    const [phone, setPhone] = useState("");
+    const [address, setAddress] = useState("");
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+
+    const handleSave = async () => {
+        setError("");
+        setSuccess("");
+
+        const result = await saveProfile(name, phone, address);
+
+        if (!result.response.ok) {
+            const firstError =
+                Object.values(result.data.errors ?? {}).flat()[0];
+
+            setError(firstError ?? result.data.message);
+            return;
+        }
+
+        setSuccess("Profile saved successfully!");
+    };
 
     return (
         <main className="min-h-screen bg-stone-50 text-stone-900">
@@ -43,6 +67,8 @@ export default function Profile() {
 
                             <input
                                 type="text"
+                                value={name}
+                                onChange={(event) => setName(event.target.value)}
                                 className="w-full rounded-lg border border-stone-300 px-4 py-3 outline-none focus:border-stone-500"
                                 placeholder="Enter your name"
                             />
@@ -68,6 +94,8 @@ export default function Profile() {
 
                             <input
                                 type="tel"
+                                value={phone}
+                                onChange={(event) => setPhone(event.target.value)}
                                 className="w-full rounded-lg border border-stone-300 px-4 py-3 outline-none focus:border-stone-500"
                                 placeholder="Enter your phone number"
                             />
@@ -80,13 +108,28 @@ export default function Profile() {
 
                             <textarea
                                 rows={3}
+                                value={address}
+                                onChange={(event) => setAddress(event.target.value)}
                                 className="w-full rounded-lg border border-stone-300 px-4 py-3 outline-none focus:border-stone-500"
                                 placeholder="Enter your address"
                             />
                         </div>
 
+                        {error && (
+                            <p className="text-sm text-red-600">
+                                {error}
+                            </p>
+                        )}
+
+                        {success && (
+                            <p className="text-sm text-green-600">
+                                {success}
+                            </p>
+                        )}
+
                         <button
                             type="button"
+                            onClick={handleSave}
                             className="w-full rounded-lg bg-stone-900 px-4 py-3 font-medium text-white hover:bg-stone-700"
                         >
                             Save Changes

@@ -128,7 +128,7 @@ class Application {
     }
 
 
-    static async saveChanges(supabase: SupabaseClient, applicationId: number, responses: { id: number; response: string }[], commitment: boolean) {
+    static async saveChanges(supabase: SupabaseClient, applicationId: number, responses: { id: number; response: string }[], commitment: boolean, userNotes: String) {
         
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
@@ -160,7 +160,9 @@ class Application {
 
         const { data, error } = await supabase
             .from("Applications")
-            .update({ commitment_question: commitment })
+            .update({ commitment_question: commitment,
+                      user_notes: userNotes
+             })
             .eq("id", applicationId)
 
         if (error) {

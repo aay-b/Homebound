@@ -96,7 +96,7 @@ router.get("/applications/view/:applicationId", async (req, res) => {
 router.patch("/applications/:applicationId/save", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
-        const { responses, commitment_question } = req.body;
+        const { responses, commitment_question, user_notes } = req.body;
 
         if (!applicationId) {
             return res.status(400).json({
@@ -109,7 +109,8 @@ router.patch("/applications/:applicationId/save", async (req, res) => {
             supabase,
             applicationId,
             responses,
-            commitment_question
+            commitment_question,
+            user_notes
         );
 
         if (error) {

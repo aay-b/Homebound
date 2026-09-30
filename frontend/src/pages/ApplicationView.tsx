@@ -22,6 +22,7 @@ function ApplicationView() {
         };
         application_status: string;
         decision_feedback: string;
+        user_notes: string
         commitment_question: boolean;
         created_at: string;
         submitted_at: string | null;
@@ -34,6 +35,7 @@ function ApplicationView() {
     const [responses, setResponses] = useState<Response[]>([]);
     const [unsavedChanges, setUnsavedChanges] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [userNotes, setUserNotes] = useState("")
 
     const navigate = useNavigate();
 
@@ -50,6 +52,7 @@ function ApplicationView() {
             const result = await response.json();
             setApplication(result.data[0]);
             setCommitment(result.data[0].commitment_question)
+            setUserNotes(result.data[0].user_notes);
         }
 
         fetchApplication();
@@ -102,7 +105,8 @@ function ApplicationView() {
                             id: response.id,
                             response: response.response
                         })),
-                        commitment_question: commitment
+                        commitment_question: commitment,
+                        user_notes: userNotes
                     })
                 }
             );
@@ -254,7 +258,29 @@ function ApplicationView() {
                             </div>
                         ))}
                     </div>
+                    <div className="mt-6">
+                        <p className="text-center text-sm text-[#5F6258]">
+                            Please enter any other notes that may affect your ability to adopt or care for this pet:
+                        </p>
 
+                        {application?.application_status === "In Progress" ? (
+                            <textarea
+                                value={userNotes}
+                                onChange={(event) => {
+                                    setUserNotes(event.target.value);
+                                    setUnsavedChanges(true);
+                                }}
+                                disabled={isSaving}
+                                rows={6}
+                                className="mt-3 w-full resize-y rounded-xl border border-[#757A5E] bg-white p-4 text-[#111111] outline-none focus:border-[#344336] focus:ring-1 focus:ring-[#344336]"
+                                placeholder="Enter any additional information here..."
+                            />
+                        ) : (
+                            <div className="mt-3 min-h-24 w-full whitespace-pre-wrap rounded-xl border border-[#757A5E] bg-white p-4 text-[#5F6258]">
+                                {application?.user_notes}
+                            </div>
+                        )}
+                    </div>
                     <div className="mt-6">
                         <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[#757A5E] bg-white p-5">
                             <input
@@ -274,8 +300,9 @@ function ApplicationView() {
                                 "
                             />
 
-                            <span className="text-[#111111]">
-                                Will you commit to taking proper care of this pet?
+                            <span className="text-[#111111] italic">
+                                I understand that adopting a pet is a long-term responsibility, and I commit to providing appropriate food, shelter, attention, and a safe living environment for this pet.
+                                I promise to offer this pet a happy home and a good life.
                             </span>
                         </label>
                     </div>

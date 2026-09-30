@@ -34,6 +34,35 @@ router.get("/applications", async (req, res) => {
 });
 
 
+// Get info for all applications for a specific pet listing
+router.get("/shelter/applications/:listingId", async (req, res) => {
+    try {
+        const listingId = Number(req.params.listingId);
+        const { data, error } = await Application.getPetApplicationInfo(supabase, listingId);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch applications",
+            });
+        }
+
+        return res.json({
+            success: true,
+            data,
+            count: data?.length ?? 0,
+        });
+    } catch (err) {
+        console.error("GET /applications error:", err);
+    }
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
+
+
 // Get a single application by application ID
 router.get("/applications/:applicationId", async (req, res) => {
     try {

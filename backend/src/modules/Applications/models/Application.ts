@@ -202,6 +202,53 @@ class Application {
 
         return { error: null };
     }
+
+
+    static async getPetApplicationInfo(supabase: SupabaseClient, listingId: number) {
+        if (!listingId) {
+            return {
+                error: new Error("listingId is required"),
+                data: null,
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .select(`
+                id,
+                applicant_id
+                listing:listing_id (
+                    pet_name,
+                    shelter:shelter_id (
+                        shelter_name
+                    )
+                ),
+                user_notes,
+                application_status,
+                decision_feedback,
+                commitment_question,
+                created_at,
+                submitted_at
+            `)
+            .eq("listing_id", listingId)
+            .eq("application_status", "Pending")
+            .order("submitted_at", { ascending: false });
+
+        console.log("Supabase data:", data);
+        console.log("Supabase error:", error);
+
+        if (error) {
+            return {
+                error,
+                data: null,
+            };
+        }
+
+        return {
+            data,
+            error: null,
+        };
+    }
 }
 
 export default Application;

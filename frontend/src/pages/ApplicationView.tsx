@@ -32,6 +32,7 @@ function ApplicationView() {
     const [application, setApplication] = useState<Application>();
     const [responses, setResponses] = useState<Response[]>([]);
     const [unsavedChanges, setUnsavedChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const navigate = useNavigate();
 
@@ -70,6 +71,8 @@ function ApplicationView() {
         fetchResponses();
     }, [applicationId]);
 
+    const missingResponses = !responses.every((response) => response.response.length > 0);
+
     function updateResponse(responseId: number, newAnswer: string) {
         setResponses(current =>
             current.map(response =>
@@ -84,6 +87,7 @@ function ApplicationView() {
     async function saveChanges(): Promise<boolean> {
         if (!applicationId) return false;
 
+        setIsSaving(true);
         try {
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/save`,
@@ -108,11 +112,13 @@ function ApplicationView() {
 
             alert("Application saved successfully!");
             setUnsavedChanges(false);
+            setIsSaving(false);
             return true;
 
         } catch (error) {
             console.error("Save error:", error);
             alert("Unable to save your changes.");
+            setIsSaving(false);
             return false;
         }
     }
@@ -182,6 +188,7 @@ function ApplicationView() {
                                         onChange={(event) =>
                                             updateResponse(response.id, event.target.value)
                                         }
+                                        disabled={isSaving}
                                         rows={3}
                                         className="mt-3 w-full resize-y rounded-lg border border-[#757A5E] bg-[#F7F6F2] p-3 text-[#111111] outline-none focus:border-[#344336] focus:ring-1 focus:ring-[#344336]"
                                     />
@@ -203,7 +210,7 @@ function ApplicationView() {
                                     setCommitment(event.target.checked);
                                     setUnsavedChanges(true);
                                 }}
-                                disabled={application?.application_status !== "In Progress"}
+                                disabled={application?.application_status !== "In Progress" || isSaving}
                                 className="
                                     h-6 w-6 shrink-0 cursor-pointer
                                     accent-[#344336]
@@ -220,21 +227,35 @@ function ApplicationView() {
                     </div>
 
                     {application?.application_status === "In Progress" ? (
-                        <div className="mt-4 flex justify-end gap-3">
-                            <button
-                                className="rounded-xl border border-[#344336] bg-white px-6 py-3 font-medium text-[#344336] hover:bg-[#ECEBE4] disabled:cursor-not-allowed disabled:opacity-40"
-                                onClick={saveChanges}
-                                disabled={!unsavedChanges}
-                            >
-                                Save Changes
-                            </button>
-                            <button
-                                className="rounded-xl bg-[#344336] px-6 py-3 font-medium text-white hover:bg-[#2B382D] disabled:cursor-not-allowed disabled:bg-[#A9ADA4]"
-                                onClick={submitApplication}
-                                disabled={!commitment}
-                            >
-                                Submit Application
-                            </button>
+                        <div className="mt-4 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                {missingResponses == true ? (
+                                    <p className="mt-1 text-sm text-[#F7502F]">
+                                        {"*All answers must be filled out before submission*"}
+                                    </p>
+                                ) : null}
+                                {commitment == false ? (
+                                    <p className="mt-1 text-sm text-[#F7502F]">
+                                        {"*The care commitment must be accepted*"}
+                                    </p>
+                                ) : null}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    className="rounded-xl border border-[#344336] bg-white px-6 py-3 font-medium text-[#344336] hover:bg-[#ECEBE4] disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={saveChanges}
+                                    disabled={!unsavedChanges || isSaving}
+                                >
+                                    Save Changes
+                                </button>
+                                <button
+                                    className="rounded-xl bg-[#344336] px-6 py-3 font-medium text-white hover:bg-[#2B382D] disabled:cursor-not-allowed disabled:bg-[#A9ADA4]"
+                                    onClick={submitApplication}
+                                    disabled={!commitment || missingResponses || isSaving}
+                                >
+                                    Submit Application
+                                </button>
+                            </div>
                         </div>
                     ) : null }
                 </section>

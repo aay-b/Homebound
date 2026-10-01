@@ -2,6 +2,7 @@ import homeboundLogo from "../assets/images/Homebound-logo.jpeg";
 import { useState } from "react";
 import { registerUser } from "../services/authService";
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function Register() {
     const [name, setName] = useState("");
@@ -9,6 +10,7 @@ export default function Register() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const navigate = useNavigate();
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError("");
@@ -22,6 +24,7 @@ export default function Register() {
             return;
         }
         setSuccess("Registration information is valid");
+        navigate("/login");
 };
 
     return (

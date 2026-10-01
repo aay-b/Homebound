@@ -2,6 +2,7 @@ import { useState } from "react";
 import { loginUser } from "../services/authService";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../config/supabase";
+import { Link } from "react-router-dom";
 
 export default function Login() {
     const { setUser } = useAuth();
@@ -107,6 +108,15 @@ export default function Login() {
                     >
                         Log in
                     </button>
+                    <div className="mt-6 text-center text-sm text-stone-600">
+                        Don't have an account?{" "}
+                        <Link
+                            to="/register"
+                            className="font-medium text-stone-900 underline hover:text-stone-600"
+                        >
+                            Sign up
+                        </Link>
+                    </div>
                 </form>
             </div>
         </main>

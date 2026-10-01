@@ -1,6 +1,7 @@
 import homeboundLogo from "../assets/images/Homebound-logo.jpeg";
 import { useState } from "react";
 import { registerUser } from "../services/authService";
+import { Link } from "react-router-dom";
 
 export default function Register() {
     const [name, setName] = useState("");
@@ -112,6 +113,15 @@ export default function Register() {
                                 className="mt-3 w-full rounded-xl bg-stone-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-stone-800 active:scale-[0.99] cursor-pointer">
                                 Create Account
                             </button>
+                            <div className="mt-6 text-center text-sm text-stone-600">
+                                Already have an account?{" "}
+                                <Link
+                                    to="/login"
+                                    className="font-medium text-stone-900 underline hover:text-stone-600"
+                                >
+                                    Sign in
+                                </Link>
+                            </div>
                         </form>
                     </div>
                 </section>

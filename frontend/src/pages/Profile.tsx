@@ -21,6 +21,9 @@ export default function Profile() {
 
         if (file) {
             setProfilePicture(file);
+
+            const previewUrl = URL.createObjectURL(file);
+            setProfilePictureUrl(previewUrl);
         }
     }   
 

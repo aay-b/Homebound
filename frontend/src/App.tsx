@@ -1,22 +1,24 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import { AuthProvider } from '@/contexts/AuthContext'
+import Home from '@/pages/Home'
+import Login from '@/pages/Login'
 import { MessagesPage } from '@/pages/MessagesPage'
+import Profile from '@/pages/Profile'
+import Register from '@/pages/Register'
 
 export function App() {
   return (
-    <BrowserRouter>
-      {/* Add application pages here as their routes are implemented. */}
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <main className="grid min-h-screen place-items-center bg-stone-50 text-stone-900">
-              <h1 className="text-3xl font-bold">Homebound</h1>
-            </main>
-          }
-        />
-        <Route path="/messages" element={<MessagesPage />} />
-        <Route path="/messages/:demoUserId" element={<MessagesPage />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
 import type { Socket } from 'socket.io-client'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
+import { useAuth } from '@/contexts/AuthContext'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
 import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest, type IncomingMessageRequest, type OutgoingMessageRequest } from '@/services/messageRequests'
 import { getConversationMessages, type StoredMessage } from '@/services/messages'
 import { connectMessagingSocket } from '@/services/socket'
+import { getCurrentMessagingUser, type CurrentMessagingUser } from '@/services/users'
 import type { Conversation, Message, MessageRequest } from '@/types/messages'
 
 // Conversations start empty until the messaging API is connected.
@@ -249,9 +250,9 @@ function toConversationFromParticipants(
 }
 
 export function MessagesPage() {
-  // The path segment supplies a temporary account ID until authentication is available.
-  const { demoUserId } = useParams<{ demoUserId: string }>()
-  const currentUserId = demoUserId ?? '1'
+  const { user, loading: isAuthLoading } = useAuth()
+  const [messagingUser, setMessagingUser] = useState<CurrentMessagingUser | null>(null)
+  const [messagingUserError, setMessagingUserError] = useState<string | null>(null)
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
   const [outgoingMessageRequests, setOutgoingMessageRequests] = useState(initialRequests)
@@ -259,9 +260,34 @@ export function MessagesPage() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
+  const currentUserId = messagingUser?.id
 
   useEffect(() => {
-    // Reconnect whenever the URL switches the temporary demo account.
+    let isCurrentUser = true
+
+    if (!user) {
+      setMessagingUser(null)
+      return
+    }
+
+    setMessagingUserError(null)
+    getCurrentMessagingUser()
+      .then((resolvedUser) => {
+        if (isCurrentUser) setMessagingUser(resolvedUser)
+      })
+      .catch((error: unknown) => {
+        if (isCurrentUser) setMessagingUserError(error instanceof Error ? error.message : 'Unable to load messaging account.')
+      })
+
+    return () => {
+      isCurrentUser = false
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    // Reconnect whenever the authenticated messaging account changes.
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
 
@@ -362,16 +388,16 @@ export function MessagesPage() {
   }, [currentUserId])
 
   useEffect(() => {
-    if (!activeConversationId) return
+    if (!activeConversationId || !currentUserId) return
 
     // Join only the selected thread so later real-time events can be scoped to its members.
     socketRef.current?.emit('join_conversation', activeConversationId, (response: { ok: boolean; message?: string }) => {
       if (!response.ok) console.error(response.message ?? 'Unable to join the conversation room.')
     })
-  }, [activeConversationId])
+  }, [activeConversationId, currentUserId])
 
   useEffect(() => {
-    if (!activeConversationId) return
+    if (!activeConversationId || !currentUserId) return
 
     let isCurrentConversation = true
 
@@ -396,6 +422,14 @@ export function MessagesPage() {
   }, [activeConversationId, currentUserId])
 
   useEffect(() => {
+    if (!currentUserId) {
+      setActiveConversationId(null)
+      setMessageRequests([])
+      setOutgoingMessageRequests([])
+      setConversations([])
+      return
+    }
+
     let isCurrentAccount = true
 
     // Clear the previous account's selected thread before loading its messaging data.
@@ -558,6 +592,8 @@ export function MessagesPage() {
   }
 
   async function handleRequestAction(requestId: string, action: 'accept' | 'decline') {
+    if (!currentUserId) return
+
     try {
       const result = await respondToMessageRequest(currentUserId, requestId, action)
       setMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
@@ -577,6 +613,8 @@ export function MessagesPage() {
   }
 
   async function handleCancelOutgoingRequest(requestId: string) {
+    if (!currentUserId) return
+
     try {
       await cancelOutgoingMessageRequest(currentUserId, requestId)
       setOutgoingMessageRequests((requests) => requests.filter((request) => request.id !== requestId))
@@ -591,6 +629,16 @@ export function MessagesPage() {
     setOutgoingMessageRequests((requests) => [request, ...requests])
   }
 
+  if (isAuthLoading || !currentUserId) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f7f3eb] px-4 text-[#344336]">
+        <p className="rounded-xl bg-white px-5 py-4 shadow-sm">
+          {messagingUserError ?? 'Loading your messaging account...'}
+        </p>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f3eb] px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
       <div className="mx-auto max-w-6xl">
@@ -602,7 +650,7 @@ export function MessagesPage() {
             <a className="transition hover:text-white" href="#applications">Applications</a>
             <a className="border-b-2 border-[#FABF6B] pb-1 text-white" href="/messages">Messages</a>
           </nav>
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#757A5E] text-sm font-bold text-white ring-1 ring-[#FABF6B]/50" aria-label="Open profile">U</span>
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#757A5E] text-sm font-bold text-white ring-1 ring-[#FABF6B]/50" aria-label="Open profile">{getInitials(messagingUser?.name ?? 'U')}</span>
         </header>
         <div className="overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />

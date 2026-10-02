@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Socket } from 'socket.io-client'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
@@ -640,18 +641,23 @@ export function MessagesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f3eb] px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-5 flex items-center justify-between rounded-2xl bg-[#344336] px-5 py-4 text-white shadow-lg shadow-[#344336]/20 sm:px-7">
-          <a className="text-xl font-extrabold tracking-tight" href="#home">Homebound<span className="text-[#FABF6B]">.</span></a>
-          <nav className="hidden items-center gap-7 text-sm font-medium text-[#FABF6B]/75 sm:flex" aria-label="Primary navigation">
-            <a className="transition hover:text-white" href="#home">Home</a>
-            <a className="transition hover:text-white" href="#search">Search</a>
-            <a className="transition hover:text-white" href="#applications">Applications</a>
-            <a className="border-b-2 border-[#FABF6B] pb-1 text-white" href="/messages">Messages</a>
-          </nav>
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#757A5E] text-sm font-bold text-white ring-1 ring-[#FABF6B]/50" aria-label="Open profile">{getInitials(messagingUser?.name ?? 'U')}</span>
-        </header>
+    <main className="min-h-screen bg-stone-50 text-stone-900">
+      <nav className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 px-6 py-4 backdrop-blur md:px-10">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <Link to="/" className="text-xl font-bold tracking-[0.15em]">
+            HOMEBOUND
+          </Link>
+          <div className="hidden items-center gap-8 text-sm font-medium md:flex">
+            <Link to="/" className="transition hover:text-stone-500">Home</Link>
+            <Link to="/pets" className="transition hover:text-stone-500">Find a Pet</Link>
+            <Link to="/messages" className="text-stone-900 transition hover:text-stone-500">Messages</Link>
+            <Link to="/profile" className="rounded-full border border-stone-300 px-5 py-2.5 transition hover:bg-stone-100">
+              My Profile
+            </Link>
+          </div>
+        </div>
+      </nav>
+      <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
         <div className="overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />

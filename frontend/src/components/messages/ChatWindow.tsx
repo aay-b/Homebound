@@ -45,7 +45,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }, [conversation?.id, conversation?.messages.length])
 
   if (!conversation) {
-    return <section className="h-[640px] flex-1 bg-[#fffdf9]" />
+    return <section className="h-[calc(100vh-9rem)] min-h-[640px] max-h-[760px] flex-1 bg-[#fffdf9]" />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -104,7 +104,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }
 
   return (
-    <section className="flex h-[640px] flex-1 flex-col bg-[#fffdf9]">
+    <section className="flex h-[calc(100vh-9rem)] min-h-[640px] max-h-[760px] flex-1 flex-col bg-[#fffdf9]">
       <header className="border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-full bg-[#FABF6B]/40 text-sm font-bold text-[#344336]">{conversation.participantInitials}</div>

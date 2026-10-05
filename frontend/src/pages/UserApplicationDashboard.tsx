@@ -189,9 +189,20 @@ function UserApplicationDashboard() {
                                             </span>
 
                                             <p className="mt-2 text-center text-xs text-[#5F6258]">
-                                                {application.submitted_at
-                                                    ? `Submitted ${new Date(application.submitted_at).toLocaleDateString()}`
-                                                    : `Started ${new Date(application.created_at).toLocaleDateString()}`}
+                                                <span className="block">
+                                                    {application.submitted_at
+                                                        ? `Submitted ${new Date(application.submitted_at).toLocaleDateString()}`
+                                                        : `Started ${new Date(application.created_at).toLocaleDateString()}`}
+                                                </span>
+
+                                                <span className="block">
+                                                    {new Date(
+                                                        application.submitted_at ?? application.created_at
+                                                    ).toLocaleTimeString([], {
+                                                        hour: "numeric",
+                                                        minute: "2-digit"
+                                                    })}
+                                                </span>
                                             </p>
 
                                             <div className="mt-6 flex h-5 items-center justify-center">

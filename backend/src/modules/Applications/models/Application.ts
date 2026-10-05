@@ -217,7 +217,8 @@ class Application {
 
         if (application.application_status !== "Pending") {
             return {
-                error: new Error("This application's status has already been changed.")
+                error: new Error(`This application's status has already been changed to ${application.application_status}.`),
+                status: 409
             };
         }
 
@@ -249,7 +250,8 @@ class Application {
 
         if (application.application_status !== "Pending") {
             return {
-                error: new Error("This application's status has already been changed.")
+                error: new Error(`This application's status has already been changed to ${application.application_status}.`),
+                status: 409
             };
         }
 

@@ -100,18 +100,28 @@ function ApplicationView() {
                     }),
                 }
             );
-
+            const result = await response.json();
             if (!response.ok) {
-                throw new Error("Failed to approve application");
+                throw new Error(
+                    result.message || "Failed to approve application"
+                );
             }
-
             alert("Application approved successfully!");
             setIsApproving(false);
-            navigate(`/jacob/shelter/listings/${application.listing_id}/applications`, { replace: true });
+            navigate(
+                `/jacob/shelter/listings/${application.listing_id}/applications`
+            );
 
         } catch (error) {
             console.error("Approval error:", error);
-            alert("Unable to approve application.");
+            if (error instanceof Error) {
+                alert(error.message);
+                navigate(
+                    `/jacob/shelter/listings/${application.listing_id}/applications`
+                );
+            } else {
+                alert("Unable to approve application.");
+            }
             setIsApproving(false);
         }
     }
@@ -136,21 +146,36 @@ function ApplicationView() {
                     }),
                 }
             );
+            const result = await response.json();
 
             if (!response.ok) {
-                throw new Error("Failed to deny application");
+                throw new Error(
+                    result.message || "Failed to deny application"
+                );
             }
-
             alert("Application denied successfully!");
             setIsDenying(false);
-            navigate(`/jacob/shelter/listings/${application.listing_id}/applications`, { replace: true });
+            navigate(
+                `/jacob/shelter/listings/${application.listing_id}/applications`,
+                { replace: true }
+            );
 
         } catch (error) {
             console.error("Denial error:", error);
-            alert("Unable to deny application.");
+
+            if (error instanceof Error) {
+                alert(error.message);
+
+                navigate(
+                    `/jacob/shelter/listings/${application.listing_id}/applications`
+                );
+            } else {
+                alert("Unable to deny application.");
+            }
             setIsDenying(false);
         }
     }
+
 
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">

@@ -275,7 +275,7 @@ router.patch("/applications/:applicationId/deny", async (req, res) => {
         if (error) {
             console.error("Save error:", error);
 
-            return res.status(400).json({
+            return res.status(409).json({
                 success: false,
                 message: error.message
             });

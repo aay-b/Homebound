@@ -76,8 +76,11 @@ function UserApplicationDashboard() {
                 }
             );
 
+            const result = await response.json();
             if (!response.ok) {
-                throw new Error("Failed to withdraw application");
+                throw new Error(
+                    result.message || "Failed to withdraw application"
+                );
             }
 
             setApplications(current =>
@@ -93,7 +96,12 @@ function UserApplicationDashboard() {
             
         } catch (error) {
             console.error("Withdrawal error:", error);
-            alert("Unable to withdraw application.");
+            if (error instanceof Error) {
+                alert(error.message);
+            } else {
+                alert("Unable to withdraw application.");
+            }
+            setWithdrawId(null);
         }
     }
 

@@ -4,6 +4,7 @@ import { supabase } from "../config/supabase";
 type User = {
     id: string;
     email: string;
+    name: string;
 };
 
 type AuthContextType = {
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser({
                 id: data.session.user.id,
                 email: data.session.user.email ?? "",
+                name: typeof data.session.user.user_metadata.name === "string" ? data.session.user.user_metadata.name : "",
                 });
             }
             setLoading(false);

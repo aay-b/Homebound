@@ -16,6 +16,7 @@
     "dotenv": "latest",
     "express": "latest",
     "pg": "^8.23.0",
+    "socket.io": "^4.8.3",
     "zod": "latest"
   },
   "devDependencies": {

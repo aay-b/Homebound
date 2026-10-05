@@ -30,17 +30,15 @@ export default function Register() {
     return (
         <main className="min-h-screen bg-stone-50 px-6 py-8 text-stone-900">
             <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl overflow-hidden rounded-3xl bg-white shadow-xl">
-                <section className="hidden w-1/2 flex-col justify-between bg-stone-900 p-12 text-white md:flex">
-                <div>
+                <section className="hidden w-1/2 items-center justify-center bg-stone-900 p-12 text-white md:flex">
+                <div className="flex max-w-md flex-col items-center text-center">
                     <img
                         src={homeboundLogo}
                         alt="Homebound Logo"
-                        className="h-56 w-auto"/>
-                    <div className="mt-24 max-w-md">
-                        <p className="mt-6 text-lg leading-8 text-stone-300">
-                            Create an account and start discovering pets waiting for their forever home.
-                        </p>
-                    </div>
+                        className="h-52 w-auto"/>
+                    <p className="mt-12 text-lg leading-8 text-stone-300">
+                        Create an account and start discovering pets waiting for their forever home.
+                    </p>
                 </div>
                 </section>
 

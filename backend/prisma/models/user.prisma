@@ -1,0 +1,15 @@
+/// Represents every account that can participate in messaging.
+model User {
+  id                       BigInt               @id @default(autoincrement())
+  name                     String
+  email                    String               @unique
+  role                     String
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentMessageRequests      MessageRequest[]     @relation("MessageRequestSender")
+  receivedMessageRequests  MessageRequest[]     @relation("MessageRequestRecipient")
+  conversationMemberships  ConversationMember[]
+  sentMessages             Message[]
+  reactions                MessageReaction[]
+
+  @@map("Users")
+}

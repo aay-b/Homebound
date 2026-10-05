@@ -1,12 +1,11 @@
-import { application, Router } from "express";
+import { Router } from "express";
+import { supabase } from "../../config/supabase.js";
+import Application from "./applications.middleware.js";
 
-import { supabase } from "../../../config/supabase.js";
-import Application from "../models/Application.js";
-
-const router = Router();
+export const applicationRouter = Router();
 
 // Get info for all of a user's applications
-router.get("/applications", async (req, res) => {
+applicationRouter.get("/", async (req, res) => {
     try {
         const userId = 1;
         const { data, error } = await Application.getUserApplicationInfo(supabase, userId);
@@ -24,7 +23,7 @@ router.get("/applications", async (req, res) => {
             count: data?.length ?? 0,
         });
     } catch (err) {
-        console.error("GET /applications error:", err);
+        console.error("GET / error:", err);
     }
 
     return res.status(500).json({
@@ -35,7 +34,7 @@ router.get("/applications", async (req, res) => {
 
 
 // Get info for all applications for a specific pet listing
-router.get("/shelter/applications/:listingId", async (req, res) => {
+applicationRouter.get("/shelter/:listingId", async (req, res) => {
     try {
         const listingId = Number(req.params.listingId);
         const { data, error } = await Application.getPetApplicationInfo(supabase, listingId);
@@ -53,7 +52,7 @@ router.get("/shelter/applications/:listingId", async (req, res) => {
             count: data?.length ?? 0,
         });
     } catch (err) {
-        console.error("GET /applications error:", err);
+        console.error("GET / error:", err);
     }
 
     return res.status(500).json({
@@ -64,7 +63,7 @@ router.get("/shelter/applications/:listingId", async (req, res) => {
 
 
 // Get a single application by application ID
-router.get("/applications/:applicationId", async (req, res) => {
+applicationRouter.get("/:applicationId", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
         const { data, error } = await Application.getApplicationInfo(supabase, applicationId);
@@ -93,7 +92,7 @@ router.get("/applications/:applicationId", async (req, res) => {
 
 
 // Get the responses for a specific application
-router.get("/applications/view/:applicationId", async (req, res) => {
+applicationRouter.get("/view/:applicationId", async (req, res) => {
     try {
         const userId = req.params.applicationId;
         const { data, error } = await Application.getApplicationResponses(supabase, userId);
@@ -122,7 +121,7 @@ router.get("/applications/view/:applicationId", async (req, res) => {
 
 
 // Saves a person's responses within an application
-router.patch("/applications/:applicationId/save", async (req, res) => {
+applicationRouter.patch("/:applicationId/save", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
         const { responses, commitment_question, user_notes } = req.body;
@@ -168,7 +167,7 @@ router.patch("/applications/:applicationId/save", async (req, res) => {
 
 
 // Submits a specific application
-router.patch("/applications/:applicationId/submit", async (req, res) => {
+applicationRouter.patch("/:applicationId/submit", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
 
@@ -210,7 +209,7 @@ router.patch("/applications/:applicationId/submit", async (req, res) => {
 
 
 // Approves a specific application
-router.patch("/applications/:applicationId/approve", async (req, res) => {
+applicationRouter.patch("/:applicationId/approve", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
         const { decisionFeedback } = req.body;
@@ -254,7 +253,7 @@ router.patch("/applications/:applicationId/approve", async (req, res) => {
 
 
 // Denies a specific application
-router.patch("/applications/:applicationId/deny", async (req, res) => {
+applicationRouter.patch("/:applicationId/deny", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
         const { decisionFeedback } = req.body;
@@ -298,7 +297,7 @@ router.patch("/applications/:applicationId/deny", async (req, res) => {
 
 
 // Withdraws a specific application
-router.patch("/applications/:applicationId/withdraw", async (req, res) => {
+applicationRouter.patch("/:applicationId/withdraw", async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
 
@@ -337,5 +336,3 @@ router.patch("/applications/:applicationId/withdraw", async (req, res) => {
         });
     }
 });
-
-export default router;

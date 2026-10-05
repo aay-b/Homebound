@@ -38,6 +38,7 @@ function ApplicationView() {
     const [userNotes, setUserNotes] = useState("")
     const [applicationLoading, setApplicationLoading] = useState(true);
     const [responsesLoading, setResponsesLoading] = useState(true);
+    const [submitPopup, setSubmitPopup] = useState(false);
 
     const navigate = useNavigate();
 
@@ -121,7 +122,6 @@ function ApplicationView() {
                 throw new Error("Failed to save application");
             }
 
-            alert("Application saved successfully!");
             setUnsavedChanges(false);
             setIsSaving(false);
             return true;
@@ -158,6 +158,7 @@ function ApplicationView() {
                 throw new Error("Failed to submit application");
             }
 
+            setSubmitPopup(false);
             alert("Application submitted successfully!");
             navigate("/applications", { replace: true });
 
@@ -373,7 +374,7 @@ function ApplicationView() {
                                     </button>
                                     <button
                                         className="rounded-xl bg-[#344336] px-6 py-3 font-medium text-white hover:bg-[#2B382D] disabled:cursor-not-allowed disabled:bg-[#A9ADA4]"
-                                        onClick={submitApplication}
+                                        onClick={() => setSubmitPopup(true)}
                                         disabled={!commitment || missingResponses || isSaving}
                                     >
                                         Submit Application
@@ -385,6 +386,49 @@ function ApplicationView() {
 
                 </div>
             }
+            {submitPopup === true ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                        <h2 className="text-xl font-semibold text-[#111111]">
+                            Submit Application?
+                        </h2>
+
+                        <p className="mt-3 text-sm leading-6 text-[#5F6258]">
+                            Are you sure you want to submit this application? This action cannot be undone, and your application will be sent to shelter staff.
+                        </p>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                className="rounded-xl border border-[#757A5E] px-5 py-2.5 font-medium text-[#111111] hover:bg-[#ECEBE4]"
+                                onClick={() => setSubmitPopup(false)}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                className="rounded-xl bg-red-700 px-5 py-2.5 font-medium text-white hover:bg-red-800"
+                                onClick={submitApplication}
+                            >
+                                Submit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+            {isSaving === true ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="rounded-2xl bg-white px-10 py-8 text-center shadow-xl">
+                        <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-[#D6D8D0] border-t-[#344336]">
+                        </div>
+                        <p className="text-lg font-medium text-[#111111]">
+                            {submitPopup === true ? 
+                            `Submitting your application...`
+                            :
+                            `Saving changes...`}
+                        </p>
+                    </div>
+                </div>
+            ) : null}
         </main>
     );
 }

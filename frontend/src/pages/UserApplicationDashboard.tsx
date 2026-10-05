@@ -21,6 +21,7 @@ function UserApplicationDashboard() {
     const navigate = useNavigate();
     const [applications, setApplications] = useState<Application[]>([]);
     const [applicationsLoading, setApplicationsLoading] = useState(true);
+    const [withdrawId, setWithdrawId] = useState<number | null>(null);
 
     useEffect(() => {
         async function fetchApplications() {
@@ -87,6 +88,7 @@ function UserApplicationDashboard() {
                 )
             );
 
+            setWithdrawId(null);
             alert("Application withdrawn successfully!");
             
         } catch (error) {
@@ -188,7 +190,7 @@ function UserApplicationDashboard() {
                                                 {application.application_status === "Pending" ? (
                                                     <button
                                                         className="text-xs text-[#777777] hover:text-[#444444] hover:underline"
-                                                        onClick={() => withdrawApplication(application.id)}
+                                                        onClick={() => setWithdrawId(application.id)}
                                                     >
                                                         Withdraw
                                                     </button>
@@ -216,6 +218,35 @@ function UserApplicationDashboard() {
 
                 </div>
             }
+            {withdrawId !== null ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                        <h2 className="text-xl font-semibold text-[#111111]">
+                            Withdraw Application?
+                        </h2>
+
+                        <p className="mt-3 text-sm leading-6 text-[#5F6258]">
+                            Are you sure you want to withdraw this application? This action cannot be undone.
+                        </p>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                className="rounded-xl border border-[#757A5E] px-5 py-2.5 font-medium text-[#111111] hover:bg-[#ECEBE4]"
+                                onClick={() => setWithdrawId(null)}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                className="rounded-xl bg-red-700 px-5 py-2.5 font-medium text-white hover:bg-red-800"
+                                onClick={() => {withdrawApplication(withdrawId) }}
+                            >
+                                Withdraw
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </main>
     );
 }

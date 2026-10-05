@@ -172,7 +172,6 @@ class Application {
         return { error: null };
     }
 
-
     static async submitApplication(supabase: SupabaseClient, applicationId: number) {
             
         const { data: application, error: lookupError } = await supabase
@@ -194,6 +193,70 @@ class Application {
         const { data, error } = await supabase
             .from("Applications")
             .update({ application_status: "Pending" })
+            .eq("id", applicationId)
+
+        if (error) {
+            return { error };
+        }
+
+        return { error: null };
+    }
+
+
+    static async approveApplication(supabase: SupabaseClient, applicationId: number, decisionFeedback: string) {
+            
+        const { data: application, error: lookupError } = await supabase
+            .from("Applications")
+            .select("application_status")
+            .eq("id", applicationId)
+            .single();
+
+        if (lookupError) {
+            return { error: lookupError };
+        }
+
+        if (application.application_status !== "Pending") {
+            return {
+                error: new Error("This application's status has already been changed.")
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update({ application_status: "Approved",
+                      decision_feedback: decisionFeedback})
+            .eq("id", applicationId)
+
+        if (error) {
+            return { error };
+        }
+
+        return { error: null };
+    }
+
+
+    static async denyApplication(supabase: SupabaseClient, applicationId: number, decisionFeedback: string) {
+            
+        const { data: application, error: lookupError } = await supabase
+            .from("Applications")
+            .select("application_status")
+            .eq("id", applicationId)
+            .single();
+
+        if (lookupError) {
+            return { error: lookupError };
+        }
+
+        if (application.application_status !== "Pending") {
+            return {
+                error: new Error("This application's status has already been changed.")
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update({ application_status: "Denied",
+                      decision_feedback: decisionFeedback})
             .eq("id", applicationId)
 
         if (error) {

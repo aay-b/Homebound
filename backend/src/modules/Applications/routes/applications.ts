@@ -208,4 +208,90 @@ router.patch("/applications/:applicationId/submit", async (req, res) => {
     }
 });
 
+// Approves a specific application
+router.patch("/applications/:applicationId/approve", async (req, res) => {
+    try {
+        const applicationId = Number(req.params.applicationId);
+        const { decisionFeedback } = req.body;
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid application ID"
+            });
+        }
+
+        const { error } = await Application.approveApplication(
+            supabase,
+            applicationId,
+            decisionFeedback
+        );
+
+        if (error) {
+            console.error("Approval error:", error);
+
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Application approved successfully"
+        });
+
+    } catch (error) {
+        console.error("Application approval error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+});
+
+// Denies a specific application
+router.patch("/applications/:applicationId/deny", async (req, res) => {
+    try {
+        const applicationId = Number(req.params.applicationId);
+        const { decisionFeedback } = req.body;
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid application ID"
+            });
+        }
+
+        const { error } = await Application.denyApplication(
+            supabase,
+            applicationId,
+            decisionFeedback
+        );
+
+        if (error) {
+            console.error("Save error:", error);
+
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Application denied successfully"
+        });
+
+    } catch (error) {
+        console.error("Application denial error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+});
+
 export default router;

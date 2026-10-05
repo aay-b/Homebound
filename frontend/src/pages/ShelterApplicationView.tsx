@@ -70,6 +70,67 @@ function ApplicationView() {
     }, [applicationId]);
 
 
+    async function approveApplication() {
+        if (!applicationId || !application) return;
+
+        try {
+            const response = await fetch(
+                `http://localhost:3000/api/applications/${applicationId}/approve`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        decisionFeedback: "NOT IMPLEMENTED"
+                    }),
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("Failed to approve application");
+            }
+
+            alert("Application approved successfully!");
+            navigate(`/jacob/shelter/listings/${application.listing_id}/applications`, { replace: true });
+
+        } catch (error) {
+            console.error("Approval error:", error);
+            alert("Unable to approve application.");
+        }
+    }
+
+
+    async function denyApplication() {
+        if (!applicationId || !application) return;
+
+        try {
+            const response = await fetch(
+                `http://localhost:3000/api/applications/${applicationId}/deny`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        decisionFeedback: "NOT IMPLEMENTED"
+                    }),
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("Failed to deny application");
+            }
+
+            alert("Application denied successfully!");
+            navigate(`/jacob/shelter/listings/${application.listing_id}/applications`, { replace: true });
+
+        } catch (error) {
+            console.error("Denial error:", error);
+            alert("Unable to deny application.");
+        }
+    }
+
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
             <div className="mx-auto max-w-5xl">
@@ -133,11 +194,13 @@ function ApplicationView() {
                         <div className="flex gap-3">
                             <button
                                 className="rounded-xl border border-[#344336] bg-white px-6 py-3 font-medium text-[#344336] hover:bg-[#ECEBE4] disabled:cursor-not-allowed disabled:opacity-40"
+                                onClick={approveApplication}
                             >
                                 Approve
                             </button>
                             <button
                                 className="rounded-xl bg-[#344336] px-6 py-3 font-medium text-white hover:bg-[#2B382D] disabled:cursor-not-allowed disabled:bg-[#A9ADA4]"
+                                onClick={denyApplication}
                             >
                                 Reject
                             </button>

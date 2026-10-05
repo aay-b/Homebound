@@ -267,6 +267,37 @@ class Application {
     }
 
 
+    static async withdrawApplication(supabase: SupabaseClient, applicationId: number) {
+            
+        const { data: application, error: lookupError } = await supabase
+            .from("Applications")
+            .select("application_status")
+            .eq("id", applicationId)
+            .single();
+
+        if (lookupError) {
+            return { error: lookupError };
+        }
+
+        if (application.application_status !== "Pending") {
+            return {
+                error: new Error("This application's status has already been changed.")
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update({ application_status: "Withdrawn" })
+            .eq("id", applicationId)
+
+        if (error) {
+            return { error };
+        }
+
+        return { error: null };
+    }
+
+
     static async getPetApplicationInfo(supabase: SupabaseClient, listingId: number) {
         if (!listingId) {
             return {

@@ -59,6 +59,40 @@ function UserApplicationDashboard() {
         }
     }
 
+    async function withdrawApplication(applicationId: number) {
+        if (!applicationId) return;
+
+        try {
+            const response = await fetch(
+                `http://localhost:3000/api/applications/${applicationId}/withdraw`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("Failed to withdraw application");
+            }
+
+            setApplications(current =>
+                current.map(application =>
+                    application.id === applicationId
+                        ? { ...application, application_status: "Withdrawn" }
+                        : application
+                )
+            );
+
+            alert("Application withdrawn successfully!");
+            
+        } catch (error) {
+            console.error("Withdrawal error:", error);
+            alert("Unable to withdraw application.");
+        }
+    }
+
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
             <div className="mx-auto max-w-5xl">
@@ -123,6 +157,17 @@ function UserApplicationDashboard() {
                                                 ? `Submitted ${new Date(application.submitted_at).toLocaleDateString()}`
                                                 : `Started ${new Date(application.created_at).toLocaleDateString()}`}
                                         </p>
+
+                                        <div className="mt-6 flex h-5 items-center justify-center">
+                                            {application.application_status === "Pending" ? (
+                                                <button
+                                                    className="text-xs text-[#777777] hover:text-[#444444] hover:underline"
+                                                    onClick={() => withdrawApplication(application.id)}
+                                                >
+                                                    Withdraw
+                                                </button>
+                                            ) : null}
+                                        </div>
                                     </div>
 
                                     <div className="flex w-28 shrink-0 items-center justify-end">

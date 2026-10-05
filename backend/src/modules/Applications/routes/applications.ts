@@ -208,6 +208,7 @@ router.patch("/applications/:applicationId/submit", async (req, res) => {
     }
 });
 
+
 // Approves a specific application
 router.patch("/applications/:applicationId/approve", async (req, res) => {
     try {
@@ -251,6 +252,7 @@ router.patch("/applications/:applicationId/approve", async (req, res) => {
     }
 });
 
+
 // Denies a specific application
 router.patch("/applications/:applicationId/deny", async (req, res) => {
     try {
@@ -286,6 +288,48 @@ router.patch("/applications/:applicationId/deny", async (req, res) => {
 
     } catch (error) {
         console.error("Application denial error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+});
+
+
+// Withdraws a specific application
+router.patch("/applications/:applicationId/withdraw", async (req, res) => {
+    try {
+        const applicationId = Number(req.params.applicationId);
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid application ID"
+            });
+        }
+
+        const { error } = await Application.withdrawApplication(
+            supabase,
+            applicationId,
+        );
+
+        if (error) {
+            console.error("Withdrawal error:", error);
+
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Application withdrawn successfully"
+        });
+
+    } catch (error) {
+        console.error("Application withdrawal error:", error);
 
         return res.status(500).json({
             success: false,

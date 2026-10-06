@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "../config/supabase";
 
 function ApplicationView() {
 
@@ -48,9 +49,13 @@ function ApplicationView() {
                 setApplicationLoading(false);
                 return;
             }
-
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
-                `http://localhost:3000/api/applications/${applicationId}`
+                `http://localhost:3000/api/applications/${applicationId}`, {
+                    headers: {
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                }
             );
 
             const result = await response.json();
@@ -67,9 +72,13 @@ function ApplicationView() {
                 setResponsesLoading(false);
                 return;
             }
-
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
-                `http://localhost:3000/api/applications/view/${applicationId}`
+                `http://localhost:3000/api/applications/view/${applicationId}`, {
+                    headers: {
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                }
             );
 
             const result = await response.json();

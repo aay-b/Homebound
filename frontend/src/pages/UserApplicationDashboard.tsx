@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../config/supabase";
 
 function UserApplicationDashboard() {
 
@@ -25,8 +26,13 @@ function UserApplicationDashboard() {
 
     useEffect(() => {
         async function fetchApplications() {
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
-                "http://localhost:3000/api/applications/"
+                "http://localhost:3000/api/applications/", {
+                    headers: {
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                }
             );
 
             const result = await response.json();
@@ -66,12 +72,14 @@ function UserApplicationDashboard() {
         if (!applicationId) return;
 
         try {
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/withdraw`,
                 {
                     method: "PATCH",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
                     },
                 }
             );
@@ -126,7 +134,7 @@ function UserApplicationDashboard() {
             
                 <div className="mx-auto max-w-5xl">
                     <button className="mb-5 flex items-center gap-2 rounded-lg bg-[#ACABA4] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#666B52]"
-                     onClick={() => navigate("/home") }>
+                     onClick={() => navigate("/") }>
                         <span className="text-lg leading-none">
                             ←
                         </span>

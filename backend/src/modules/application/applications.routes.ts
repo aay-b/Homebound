@@ -1,13 +1,14 @@
 import { Router } from "express";
 import { supabase } from "../../config/supabase.js";
+import { requireAuth } from "@/modules/auth/auth.middleware.js";
 import Application from "./applications.middleware.js";
 
 export const applicationRouter = Router();
 
 // Get info for all of a user's applications
-applicationRouter.get("/", async (req, res) => {
+applicationRouter.get("/", requireAuth, async (req, res) => {
     try {
-        const userId = 1;
+        const userId = req.user.id;
         const { data, error } = await Application.getUserApplicationInfo(supabase, userId);
 
         if (error) {
@@ -32,7 +33,7 @@ applicationRouter.get("/", async (req, res) => {
     });
 });
 
-
+// CURRENTLY LACKING AUTHENTICATION
 // Get info for all applications for a specific pet listing
 applicationRouter.get("/shelter/:listingId", async (req, res) => {
     try {
@@ -61,7 +62,7 @@ applicationRouter.get("/shelter/:listingId", async (req, res) => {
     });
 });
 
-
+// CURRENTLY LACKING AUTHENTICATION
 // Get a single application by application ID
 applicationRouter.get("/:applicationId", async (req, res) => {
     try {
@@ -90,12 +91,13 @@ applicationRouter.get("/:applicationId", async (req, res) => {
     });
 });
 
-
+// CURRENTLY LACKS AUTHORIZATION
 // Get the responses for a specific application
-applicationRouter.get("/view/:applicationId", async (req, res) => {
+applicationRouter.get("/view/:applicationId", requireAuth, async (req, res) => {
     try {
-        const userId = req.params.applicationId;
-        const { data, error } = await Application.getApplicationResponses(supabase, userId);
+        const applicationId = Number(req.params.applicationId);
+        const userId = req.user.id;
+        const { data, error } = await Application.getApplicationResponses(supabase, applicationId, userId);
 
         if (error) {
             return res.status(500).json({
@@ -121,9 +123,11 @@ applicationRouter.get("/view/:applicationId", async (req, res) => {
 
 
 // Saves a person's responses within an application
-applicationRouter.patch("/:applicationId/save", async (req, res) => {
+applicationRouter.patch("/:applicationId/save", requireAuth, async (req, res) => {
     try {
+        const userId = req.user.id;
         const applicationId = Number(req.params.applicationId);
+        
         const { responses, commitment_question, user_notes } = req.body;
 
         if (!applicationId) {
@@ -136,6 +140,7 @@ applicationRouter.patch("/:applicationId/save", async (req, res) => {
         const { error } = await Application.saveChanges(
             supabase,
             applicationId,
+            userId,
             responses,
             commitment_question,
             user_notes
@@ -167,9 +172,10 @@ applicationRouter.patch("/:applicationId/save", async (req, res) => {
 
 
 // Submits a specific application
-applicationRouter.patch("/:applicationId/submit", async (req, res) => {
+applicationRouter.patch("/:applicationId/submit", requireAuth, async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
+        const userId = req.user.id;
 
         if (!applicationId) {
             return res.status(400).json({
@@ -181,6 +187,7 @@ applicationRouter.patch("/:applicationId/submit", async (req, res) => {
         const { error } = await Application.submitApplication(
             supabase,
             applicationId,
+            userId,
         );
 
         if (error) {
@@ -209,9 +216,10 @@ applicationRouter.patch("/:applicationId/submit", async (req, res) => {
 
 
 // Approves a specific application
-applicationRouter.patch("/:applicationId/approve", async (req, res) => {
+applicationRouter.patch("/:applicationId/approve", requireAuth, async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
+        const userId = req.user.id;
         const { decisionFeedback } = req.body;
 
         if (!applicationId) {
@@ -224,6 +232,7 @@ applicationRouter.patch("/:applicationId/approve", async (req, res) => {
         const { error } = await Application.approveApplication(
             supabase,
             applicationId,
+            userId,
             decisionFeedback
         );
 
@@ -253,9 +262,10 @@ applicationRouter.patch("/:applicationId/approve", async (req, res) => {
 
 
 // Denies a specific application
-applicationRouter.patch("/:applicationId/deny", async (req, res) => {
+applicationRouter.patch("/:applicationId/deny", requireAuth, async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
+        const userId = req.user.id;
         const { decisionFeedback } = req.body;
 
         if (!applicationId) {
@@ -268,6 +278,7 @@ applicationRouter.patch("/:applicationId/deny", async (req, res) => {
         const { error } = await Application.denyApplication(
             supabase,
             applicationId,
+            userId,
             decisionFeedback
         );
 
@@ -297,21 +308,18 @@ applicationRouter.patch("/:applicationId/deny", async (req, res) => {
 
 
 // Withdraws a specific application
-applicationRouter.patch("/:applicationId/withdraw", async (req, res) => {
+applicationRouter.patch("/:applicationId/withdraw", requireAuth, async (req, res) => {
     try {
         const applicationId = Number(req.params.applicationId);
-
         if (!applicationId) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid application ID"
             });
         }
+        const userId = req.user.id;
 
-        const { error } = await Application.withdrawApplication(
-            supabase,
-            applicationId,
-        );
+        const { error } = await Application.withdrawApplication(supabase, applicationId, userId);
 
         if (error) {
             console.error("Withdrawal error:", error);

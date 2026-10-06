@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "../config/supabase";
 
 function ApplicationView() {
 
@@ -48,12 +49,21 @@ function ApplicationView() {
                 setApplicationLoading(false);
                 return;
             }
-
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
-                `http://localhost:3000/api/applications/${applicationId}`
+                `http://localhost:3000/api/applications/${applicationId}`, {
+                    headers: {
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                }
             );
 
             const result = await response.json();
+            if (!response.ok) {
+                console.error("Failed to fetch application:", result);
+                setApplicationLoading(false);
+                return;
+            }
             setApplication(result.data[0]);
             setCommitment(result.data[0].commitment_question)
             setUserNotes(result.data[0].user_notes);
@@ -69,13 +79,17 @@ function ApplicationView() {
                 setResponsesLoading(false);
                 return;
             }
-
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
-                `http://localhost:3000/api/applications/view/${applicationId}`
+                `http://localhost:3000/api/applications/view/${applicationId}`, {
+                    headers: {
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                }
             );
 
             const result = await response.json();
-            setResponses(result.data);
+            setResponses(result.data ?? []);
             setResponsesLoading(false);
         }
 
@@ -100,12 +114,14 @@ function ApplicationView() {
 
         setIsSaving(true);
         try {
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/save`,
                 {
                     method: "PATCH",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
                     },
                     body: JSON.stringify({
                         responses: responses.map((response) => ({
@@ -144,12 +160,14 @@ function ApplicationView() {
         }
 
         try {
+            const { data: { session }, } = await supabase.auth.getSession();
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/submit`,
                 {
                     method: "PATCH",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
                     },
                 }
             );

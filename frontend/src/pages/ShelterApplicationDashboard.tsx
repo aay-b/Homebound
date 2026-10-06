@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../config/supabase";
 
 function ShelterApplicationDashboard() {
 
     type Application = {
         id: number;
+        applicant_uid: string;
+        applicant_name: string;
         listing_id: number;
         listing: {
             pet_name: string;
@@ -21,7 +24,7 @@ function ShelterApplicationDashboard() {
         async function fetchApplications() {
             const listingId = 1;
             const response = await fetch(
-                `http://localhost:3000/api/shelter/applications/${listingId}`
+                `http://localhost:3000/api/applications/shelter/${listingId}`
             );
             const result = await response.json();
             setApplications(result.data);
@@ -91,7 +94,7 @@ function ShelterApplicationDashboard() {
                                         <div className="flex flex-1 flex-col">
                                             <div>
                                                 <h2 className="text-xl font-semibold text-[#111111]">
-                                                    USER NAME
+                                                    {application.applicant_name}
                                                 </h2>
 
                                                 <button

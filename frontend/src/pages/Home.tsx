@@ -36,6 +36,13 @@ export default function Home() {
                         </Link>
 
                         <Link
+                            to="/applications"
+                            className="transition hover:text-stone-500"
+                        >
+                            Applications
+                        </Link>
+
+                        <Link
                             to="/profile"
                             className="rounded-full border border-stone-300 px-5 py-2.5 transition hover:bg-stone-100"
                         >

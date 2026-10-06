@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 class Application {
     
-    static async getUserApplicationInfo(supabase: SupabaseClient, userId: number) {
+    static async getUserApplicationInfo(supabase: SupabaseClient, userId: string) {
         if (!userId) {
             return {
                 error: new Error("userId is required"),
@@ -28,7 +28,7 @@ class Application {
                 created_at,
                 submitted_at
             `)
-            .eq("applicant_id", userId)
+            .eq("applicant_uid", userId)
             .order("created_at", { ascending: false });
 
         console.log("Supabase data:", data);
@@ -93,10 +93,30 @@ class Application {
     }
 
 
-    static async getApplicationResponses(supabase: SupabaseClient, applicationId: string) {
+    static async getApplicationResponses(supabase: SupabaseClient, applicationId: number, userId: string) {
         if (!applicationId) {
             return {
                 error: new Error("applicationId is required"),
+                data: null,
+            };
+        }
+
+        const { data: application, error: applicationError } = await supabase
+            .from("Applications")
+            .select("id")
+            .eq("id", applicationId)
+            .maybeSingle();
+
+        if (applicationError) {
+            return {
+                error: applicationError,
+                data: null,
+            };
+        }
+
+        if (!application) {
+            return {
+                error: new Error("You are not authorized to view this application"),
                 data: null,
             };
         }
@@ -128,12 +148,13 @@ class Application {
     }
 
 
-    static async saveChanges(supabase: SupabaseClient, applicationId: number, responses: { id: number; response: string }[], commitment: boolean, userNotes: String) {
+    static async saveChanges(supabase: SupabaseClient, applicationId: number, userId: string, responses: { id: number; response: string }[], commitment: boolean, userNotes: String) {
         
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
             .select("application_status")
             .eq("id", applicationId)
+            .eq("applicant_uid", userId)
             .single();
 
         if (lookupError) {
@@ -172,12 +193,13 @@ class Application {
         return { error: null };
     }
 
-    static async submitApplication(supabase: SupabaseClient, applicationId: number) {
+    static async submitApplication(supabase: SupabaseClient, applicationId: number, userId: string) {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
             .select("application_status")
             .eq("id", applicationId)
+            .eq("applicant_uid", userId)
             .single();
 
         if (lookupError) {
@@ -202,8 +224,8 @@ class Application {
         return { error: null };
     }
 
-
-    static async approveApplication(supabase: SupabaseClient, applicationId: number, decisionFeedback: string) {
+    // CURRENTLY LACKING AUTHENTICATION
+    static async approveApplication(supabase: SupabaseClient, applicationId: number, userId: string, decisionFeedback: string) {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
@@ -235,8 +257,8 @@ class Application {
         return { error: null };
     }
 
-
-    static async denyApplication(supabase: SupabaseClient, applicationId: number, decisionFeedback: string) {
+    // CURRENTLY LACKING AUTHENTICATION
+    static async denyApplication(supabase: SupabaseClient, applicationId: number, userId: string, decisionFeedback: string) {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
@@ -269,12 +291,13 @@ class Application {
     }
 
 
-    static async withdrawApplication(supabase: SupabaseClient, applicationId: number) {
+    static async withdrawApplication(supabase: SupabaseClient, applicationId: number, userId: string) {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
             .select("application_status")
             .eq("id", applicationId)
+            .eq("applicant_uid", userId)
             .single();
 
         if (lookupError) {
@@ -312,7 +335,7 @@ class Application {
             .from("Applications")
             .select(`
                 id,
-                applicant_id
+                applicant_uid,
                 listing:listing_id (
                     pet_name,
                     shelter:shelter_id (
@@ -340,8 +363,30 @@ class Application {
             };
         }
 
+        const applicationsWithNames = await Promise.all(
+            (data ?? []).map(async (application) => {
+                const { data: authData, error: authError } =
+                    await supabase.auth.admin.getUserById(
+                        application.applicant_uid
+                    );
+
+                if (authError) {
+                    console.error(
+                        "Unable to retrieve applicant:",
+                        application.applicant_uid,
+                        authError
+                    );
+                }
+
+                return {
+                    ...application,
+                    applicant_name: authData.user?.user_metadata.name,
+                };
+            })
+        );
+
         return {
-            data,
+            data: applicationsWithNames,
             error: null,
         };
     }

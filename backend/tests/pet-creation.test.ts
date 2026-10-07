@@ -203,3 +203,37 @@ test('editing can replace photos but cannot attach foreign or missing files', as
         assert.deepEqual((await (await f.request('/1')).json()).pet.photos, []);
     } finally { await f.close(); }
 });
+
+
+test('removal marks the listing unavailable and keeps its details', async () => {
+    const f = await fixture();
+    try {
+        const before = { ...f.pets[0] };
+        assert.equal((await f.request('/1', 'DELETE')).status, 200);
+        assert.equal(f.pets.length, 3);
+        assert.deepEqual(f.pets[0], { ...before, available: false });
+        const { pet } = await (await f.request('/1')).json();
+        assert.equal(pet.available, false);
+        assert.equal(pet.pet_name, before.pet_name);
+        const managed = (await (await f.request('/manage')).json()).pets;
+        assert.equal(managed.find((item: any) => item.id === '1').available, false);
+        assert.equal((await f.request('/1', 'DELETE')).status, 200);
+        assert.equal(f.pets.length, 3);
+        assert.deepEqual(f.writes, ['update', 'update']);
+    } finally { await f.close(); }
+});
+
+test('removal rejects unauthorized users and invalid or missing listings', async () => {
+    const f = await fixture();
+    try {
+        assert.equal((await f.request('/1', 'DELETE', undefined, '')).status, 401);
+        assert.equal((await f.request('/1', 'DELETE', undefined, 'ordinary-user')).status, 403);
+        assert.equal((await f.request('/2', 'DELETE')).status, 403);
+        assert.equal((await f.request('/0', 'DELETE')).status, 400);
+        assert.equal((await f.request('/9223372036854775808', 'DELETE')).status, 400);
+        assert.equal((await f.request('/999', 'DELETE')).status, 404);
+        assert.deepEqual(f.writes, []);
+        assert.equal(f.pets[0].available, true);
+        assert.equal(f.pets[1].available, true);
+    } finally { await f.close(); }
+});

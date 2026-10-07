@@ -148,5 +148,24 @@ export function createPetManagementRouter(db: SupabaseClient, requireAuth: Reque
         }
     });
 
+    router.delete('/:id', requireAuth, async (req, res) => {
+        if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: 'Invalid pet ID.' });
+        try {
+            const { data: pet, error: lookupError } = await db.from('Listings').select('shelter_id').eq('id', req.params.id).maybeSingle();
+            if (lookupError) throw lookupError;
+            if (!pet) return res.status(404).json({ message: 'Pet listing not found.' });
+            if (!await canManage(req.user.id, String(pet.shelter_id))) return res.status(403).json({ message: 'You cannot remove pets from this shelter.' });
+            // Keep the listing so existing adoption applications still reference it.
+            const { data, error } = await db.from('Listings').update({ available: false })
+                .eq('id', req.params.id).eq('shelter_id', pet.shelter_id).select('id').maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ message: 'Pet listing not found.' });
+            return res.json({ message: 'Pet listing removed.' });
+        } catch (error) {
+            console.error('Unable to remove pet:', error);
+            return res.status(500).json({ message: 'Unable to remove the pet listing. Please try again.' });
+        }
+    });
+
     return router;
 }

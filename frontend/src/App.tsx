@@ -6,6 +6,7 @@ import Login from '@/pages/Login'
 import { MessagesPage } from '@/pages/MessagesPage'
 import Profile from '@/pages/Profile'
 import Register from '@/pages/Register'
+import PetDetailPage from '@/pages/PetDetailPage'
 
 import UserApplicationDashboard from "./pages/UserApplicationDashboard";
 import UserApplicationView from "./pages/UserApplicationView";
@@ -23,6 +24,7 @@ export function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+                <Route path="/pets/:id" element={<PetDetailPage />} />
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>
                 <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>

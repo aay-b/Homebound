@@ -64,3 +64,7 @@ export async function uploadPetPhoto(file: File, shelterId: string) {
         method: "POST", body: JSON.stringify({ shelter_id: shelterId, content_type: file.type, data }),
     }, true);
 }
+
+export async function removePet(id: string) {
+    await request(`/pets/${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
+}

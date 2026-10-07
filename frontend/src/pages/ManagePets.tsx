@@ -32,6 +32,7 @@ export default function ManagePets() {
                         {pets.map(pet => (
                             <div key={pet.id} className="flex flex-col gap-3">
                                 <PetCard pet={pet} />
+                                <Link to={`/pets/${pet.id}/edit`} className="text-sm underline">Edit {pet.pet_name}</Link>
                             </div>
                         ))}
                     </div>

@@ -29,6 +29,7 @@ export function App() {
                 <Route path="/pets/:id" element={<PetDetailPage />} />
                 <Route path="/pets/manage" element={<ProtectedRoute><ManagePets /></ProtectedRoute>} />
                 <Route path="/pets/new" element={<ProtectedRoute><PetForm /></ProtectedRoute>} />
+                <Route path="/pets/:id/edit" element={<ProtectedRoute><PetForm /></ProtectedRoute>} />
                 <Route path="/pets/:id/apply" element={<PetDetailPage applying />} />
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>

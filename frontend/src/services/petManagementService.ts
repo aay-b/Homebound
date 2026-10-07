@@ -38,6 +38,18 @@ export async function createPet(input: PetInput) {
     return data.pet;
 }
 
+export async function getManagedPet(id: string) {
+    const data = await request<{ pet: Pet }>(`/pets/${encodeURIComponent(id)}/edit`, {}, true);
+    return data.pet;
+}
+
+export async function updatePet(id: string, input: PetInput) {
+    const data = await request<{ pet: { id: string } }>(`/pets/${encodeURIComponent(id)}`, {
+        method: 'PUT', body: JSON.stringify(input),
+    }, true);
+    return data.pet;
+}
+
 export async function uploadPetPhoto(file: File, shelterId: string) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
         throw new Error("Choose a JPEG, PNG or WebP photo up to 5 MB.");

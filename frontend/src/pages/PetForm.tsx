@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PetLayout from "../components/PetLayout";
-import { getManagedShelters, createPet, uploadPetPhoto } from "../services/petManagementService";
+import { getManagedShelters, getManagedPet, createPet, updatePet, uploadPetPhoto } from "../services/petManagementService";
 import type { ManagedShelter, PetInput } from "../types/pet";
 
 const emptyPet: PetInput = {
@@ -11,7 +11,9 @@ const emptyPet: PetInput = {
 };
 const fieldClass = "mt-2 w-full rounded-xl border border-stone-300 bg-white p-3 outline-none focus:border-stone-700 focus:ring-1 focus:ring-stone-700";
 
+// #14 creates a listing; #15 loads and updates an existing listing.
 export default function PetForm() {
+    const { id } = useParams();
     const navigate = useNavigate();
     const [form, setForm] = useState<PetInput>({ ...emptyPet });
     const [shelters, setShelters] = useState<ManagedShelter[]>([]);
@@ -32,16 +34,22 @@ export default function PetForm() {
         async function load() {
             const allowed = await getManagedShelters();
             if (!allowed.length) throw new Error("Only assigned shelter staff can create or edit pet listings.");
+            const pet = id ? await getManagedPet(id) : null;
+            if (pet && !allowed.some(shelter => shelter.id === pet.shelter_id)) throw new Error("This listing belongs to another shelter.");
             if (!active) return;
             setShelters(allowed);
-            setForm({ ...emptyPet, shelter_id: allowed[0].id });
-            setPreviews([]);
+            setForm(pet ? {
+                pet_name: pet.pet_name, species: pet.species, breed: pet.breed, age: pet.age,
+                description: pet.description, health_info: pet.health_info, allergies: pet.allergies,
+                shelter_id: pet.shelter_id, photo_paths: pet.photo_paths,
+            } : { ...emptyPet, shelter_id: allowed[0].id });
+            setPreviews(pet?.photos || []);
             setReady(true);
         }
         load().catch(error => { if (active) setError(error.message); })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
-    }, []);
+    }, [id]);
 
     function change(field: Exclude<keyof PetInput, "photo_paths">, value: string) {
         setForm(current => ({ ...current, [field]: value }));
@@ -60,7 +68,7 @@ export default function PetForm() {
         setPreviews(current => current.filter((_, photoIndex) => photoIndex !== index));
     }
 
-    // Upload photos before saving their paths with the listing.
+    // #14 / #15: upload photos before saving their paths with the listing.
     async function selectPhotos(event: ChangeEvent<HTMLInputElement>) {
         const files = Array.from(event.target.files || []);
         event.target.value = "";
@@ -89,7 +97,7 @@ export default function PetForm() {
         if (!form.pet_name.trim() || !form.species.trim()) { setError("Pet name and species are required."); return; }
         setSaving(true);
         try {
-            const pet = await createPet(form);
+            const pet = id ? await updatePet(id, form) : await createPet(form);
             navigate(`/pets/${pet.id}`);
         } catch (error) { setError(error instanceof Error ? error.message : "Unable to save pet."); }
         finally { setSaving(false); }
@@ -98,8 +106,8 @@ export default function PetForm() {
     return (
         <PetLayout>
             <div className="mx-auto max-w-3xl">
-                <Link to="/pets/manage" className="text-sm underline">← Back</Link>
-                <h1 className="mt-6 text-3xl font-bold">Add a pet</h1>
+                <Link to={id ? `/pets/${id}` : "/pets/manage"} className="text-sm underline">← Back</Link>
+                <h1 className="mt-6 text-3xl font-bold">{id ? "Edit pet listing" : "Add a pet"}</h1>
                 <p className="mt-3 text-stone-600">Share the details that help this pet find the right home. Fields marked * are required.</p>
                 {loading && <p className="mt-6" role="status">Loading form...</p>}
                 {error && <p role="alert" className="my-5 rounded-xl bg-red-50 p-4 text-red-800">{error}</p>}
@@ -107,7 +115,7 @@ export default function PetForm() {
                     <fieldset disabled={saving || uploading} className="space-y-6 disabled:opacity-70">
                         <div>
                             <label htmlFor="shelter" className="font-medium">Shelter *</label>
-                            <select id="shelter" value={form.shelter_id} disabled={form.photo_paths.length > 0} onChange={event => change("shelter_id", event.target.value)} className={fieldClass}>
+                            <select id="shelter" value={form.shelter_id} disabled={Boolean(id) || form.photo_paths.length > 0} onChange={event => change("shelter_id", event.target.value)} className={fieldClass}>
                                 {shelters.map(shelter => <option key={shelter.id} value={shelter.id}>{shelter.shelter_name}</option>)}
                             </select>
                         </div>
@@ -206,8 +214,8 @@ export default function PetForm() {
                             </div>
                         </div>
                         <div className="flex items-center gap-5">
-                            <button type="submit" className="rounded-full bg-stone-900 px-7 py-3 text-white">{saving ? "Saving..." : "Create listing"}</button>
-                            <Link to="/pets/manage" className="underline">Cancel</Link>
+                            <button type="submit" className="rounded-full bg-stone-900 px-7 py-3 text-white">{saving ? "Saving..." : id ? "Save changes" : "Create listing"}</button>
+                            <Link to={id ? `/pets/${id}` : "/pets/manage"} className="underline">Cancel</Link>
                         </div>
                     </fieldset>
                     {uploading && <p className="mt-4" role="status">Uploading photos...</p>}

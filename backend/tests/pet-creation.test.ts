@@ -1,0 +1,144 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import { createClient, type User } from '@supabase/supabase-js';
+import { createPetManagementRouter } from '../src/modules/pets/pet.management.js';
+
+// Use local-only values for the auth module; all database requests below are mocked.
+process.env.SUPABASE_DB_URL = 'postgresql://localhost/test';
+process.env.SUPABASE_URL = 'https://example.test';
+process.env.SUPABASE_SECRET_KEY = 'test-key';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'test-key';
+const { createPetRouter } = await import('../src/modules/pets/pet.routes.js');
+import { validImage, validPhotoPath } from '../src/modules/pets/pet.validation.js';
+
+const staff = '11111111-1111-4111-8111-111111111111';
+
+// Fake Supabase HTTP responses let us exercise Express without touching a real project.
+async function fixture() {
+    const pets: any[] = [
+        { id: 1, pet_name: 'Rex', shelter_id: 1, species: 'Dog', breed: '', age: '2 years', description: '', health_info: '', allergies: '', photo_paths: [], available: true, shelter: { shelter_name: 'Shelter One' } },
+        { id: 2, pet_name: 'Pancake', shelter_id: 2, species: 'Cat', photo_paths: [], available: true, shelter: { shelter_name: 'Shelter Two' } },
+        { id: 3, pet_name: 'Old listing', shelter_id: 1, species: 'Dog', photo_paths: [], available: false, shelter: { shelter_name: 'Shelter One' } },
+    ];
+    const writes: string[] = [];
+    const photos = new Set<string>();
+    const db = createClient('https://example.test', 'test-key', {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: async (input, options) => {
+            const url = new URL(String(input));
+            const method = options?.method || 'GET';
+            const body = typeof options?.body === 'string' ? JSON.parse(options.body) : null;
+            const headers = new Headers(options?.headers);
+            let data: any = [];
+            if (url.pathname.endsWith('/ShelterStaff')) {
+                data = url.searchParams.get('auth_user_id') === `eq.${staff}`
+                    ? [{ shelter_id: 1, shelter: { shelter_name: 'Shelter One' } }] : [];
+            } else if (url.pathname.endsWith('/Listings')) {
+                data = pets.filter(pet => ['id', 'shelter_id', 'available'].every(key => {
+                    const filter = url.searchParams.get(key);
+                    if (!filter) return true;
+                    if (filter.startsWith('in.')) return filter.slice(4, -1).split(',').includes(String(pet[key]));
+                    return filter === `eq.${pet[key]}`;
+                }));
+                if (method === 'POST') {
+                    writes.push('insert');
+                    const created = { ...body, id: 4, shelter: { shelter_name: 'Shelter One' } };
+                    pets.push(created); data = [created];
+                }
+                if (method === 'PATCH') { writes.push('update'); data.forEach((pet: any) => Object.assign(pet, body)); }
+                if (method === 'GET' && url.searchParams.has('limit')) data = data.slice(Number(url.searchParams.get('offset') || 0), Number(url.searchParams.get('offset') || 0) + Number(url.searchParams.get('limit')));
+                if (headers.get('Accept')?.includes('vnd.pgrst.object')) data = data[0];
+            } else if (url.pathname.endsWith('/Shelters')) {
+                data = [{ shelter_name: 'Shelter One' }];
+            } else if (url.pathname.startsWith('/storage/v1/object/sign/pet-photos')) {
+                data = body.paths.map((path: string) => photos.has(path)
+                    ? { path, signedURL: `/object/sign/pet-photos/${path}?token=test` }
+                    : { path, error: 'Not found' });
+            } else if (url.pathname.startsWith('/storage/v1/object/pet-photos/')) {
+                const path = url.pathname.split('/pet-photos/')[1];
+                photos.add(path);
+                writes.push('upload');
+                data = { Key: `pet-photos/${path}`, Id: 'test-object' };
+            } else throw new Error(`Unexpected request: ${url.pathname}`);
+            return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } },
+    });
+    const app = express();
+    app.use(express.json({ limit: '8mb' }));
+    app.use('/api/pets', createPetManagementRouter(db, (req, res, next) => {
+        const userId = req.headers.authorization?.replace('Bearer ', '');
+        if (!userId) { res.status(401).json({ message: 'Authentication required' }); return; }
+        req.user = { id: userId } as User;
+        next();
+    }));
+    app.use('/api/pets', createPetRouter(db));
+    app.use((err: any, _req: any, res: any, _next: any) => { res.status(500).json({ message: err.message }); });
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
+    const address = server.address() as { port: number };
+    return {
+        pets, writes,
+        request: (path: string, method = 'GET', body?: unknown, user = staff) => fetch(`http://127.0.0.1:${address.port}/api/pets${path}`, {
+            method, headers: { 'Content-Type': 'application/json', ...(user ? { Authorization: `Bearer ${user}` } : {}) },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        }),
+        close: () => new Promise<void>(resolve => server.close(() => resolve())),
+    };
+}
+
+test('creation validates required fields and the new listing can be viewed', async () => {
+    const f = await fixture();
+    try {
+        assert.equal((await f.request('/', 'POST', { pet_name: ' ', species: 'Dog', shelter_id: '1' })).status, 400);
+        const response = await f.request('/', 'POST', { pet_name: 'Buddy', species: 'Dog', shelter_id: '1' });
+        assert.equal(response.status, 201);
+        assert.equal((await response.json()).pet.id, '4');
+        const { pet } = await (await f.request('/4')).json();
+        assert.equal(pet.pet_name, 'Buddy');
+        assert.equal(pet.available, true);
+        assert.equal(pet.photo_paths, undefined);
+    } finally { await f.close(); }
+});
+
+test('creation and photo upload require login and assigned shelter membership', async () => {
+    const f = await fixture();
+    try {
+        for (const [path, method] of [['/shelters', 'GET'], ['/manage', 'GET'], ['/', 'POST'], ['/photos', 'POST']]) {
+            assert.equal((await f.request(path, method, undefined, '')).status, 401);
+        }
+        assert.equal((await f.request('/manage', 'GET', undefined, 'ordinary-user')).status, 403);
+        assert.equal((await f.request('/', 'POST', { pet_name: 'Buddy', species: 'Dog', shelter_id: '2' })).status, 403);
+        assert.equal((await f.request('/photos', 'POST', { shelter_id: '2', content_type: 'image/png', data: 'AAAA' })).status, 403);
+        assert.deepEqual(f.writes, []);
+        assert.deepEqual((await (await f.request('/manage')).json()).pets.map((pet: any) => pet.id), ['1', '3']);
+    } finally { await f.close(); }
+});
+
+test('invalid photos and foreign paths cannot be attached to a listing', async () => {
+    const f = await fixture();
+    try {
+        for (const path of ['https://example.com/photo.png', `2/${staff}/${staff}.png`, `1/${staff}/${staff}.png`]) {
+            assert.equal((await f.request('/', 'POST', { pet_name: 'Buddy', species: 'Dog', shelter_id: '1', photo_paths: [path] })).status, 400);
+        }
+        assert.equal((await f.request('/photos', 'POST', { shelter_id: '1', content_type: 'image/png', data: Buffer.from('not an image').toString('base64') })).status, 400);
+        assert.deepEqual(f.writes, []);
+        assert.equal(validImage(Buffer.alloc(6 * 1024 * 1024), 'image/png'), false);
+        assert.equal(validPhotoPath(`2/${staff}/${staff}.png`, '1'), false);
+    } finally { await f.close(); }
+});
+
+test('a photo can be uploaded, attached to a new pet and shown with a signed URL', async () => {
+    const f = await fixture();
+    try {
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        const uploaded = await f.request('/photos', 'POST', { shelter_id: '1', content_type: 'image/png', data: png });
+        assert.equal(uploaded.status, 201);
+        const { path } = await uploaded.json();
+        assert.equal((await f.request('/', 'POST', { pet_name: 'Buddy', species: 'Dog', shelter_id: '1', photo_paths: [path] })).status, 201);
+        const { pet } = await (await f.request('/4')).json();
+        assert.equal(pet.photos.length, 1);
+        assert.ok(pet.photos[0].includes(path));
+        assert.deepEqual(f.pets.find(pet => pet.id === 4).photo_paths, [path]);
+    } finally { await f.close(); }
+});

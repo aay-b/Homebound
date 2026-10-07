@@ -1,10 +1,11 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Register from "./pages/Register";
-import Login from "./pages/Login";
-import { AuthProvider } from "./contexts/AuthContext";
-import Home from "./pages/Home";
-import Profile from "./pages/Profile";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import { AuthProvider } from '@/contexts/AuthContext'
+import Home from '@/pages/Home'
+import Login from '@/pages/Login'
+import { MessagesPage } from '@/pages/MessagesPage'
+import Profile from '@/pages/Profile'
+import Register from '@/pages/Register'
 
 import UserApplicationDashboard from "./pages/UserApplicationDashboard";
 import UserApplicationView from "./pages/UserApplicationView";
@@ -21,6 +22,7 @@ export function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>
                 <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>

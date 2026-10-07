@@ -1,11 +1,8 @@
-import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '@/generated/prisma/client.js'
+import { env } from '@/config/env.js'
 
-const adapter = new PrismaPg({
-    connectionString: process.env["SUPABASE_DB_URL"],
-});
+// Reuse one Prisma Client instance for all database operations.
+const adapter = new PrismaPg({ connectionString: env.databaseUrl })
 
-export const prisma = new PrismaClient({
-    adapter,
-});
+export const prisma = new PrismaClient({ adapter })

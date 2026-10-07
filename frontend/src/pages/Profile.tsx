@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ChangeEvent, useEffect, useState } from "react";
 import { getProfile, saveProfile, uploadProfilePicture } from "../services/authService";
 import { supabase } from "../config/supabase";
 
 export default function Profile() {
-    const { user } = useAuth();
+    const { user, setUser } = useAuth();
+    const navigate = useNavigate();
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
@@ -15,6 +17,7 @@ export default function Profile() {
     const [profilePicture, setProfilePicture] = useState<File | null>(null);
     const [profilePicturePath, setProfilePicturePath] = useState<string | undefined>();
     const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+    const [isEditingName, setIsEditingName] = useState(false);
 
     function handlePictureChange(event: ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
@@ -32,7 +35,7 @@ export default function Profile() {
         const result = await getProfile();
 
             if (result.response.ok) {
-                setName(result.data.profile.name);
+                setName(result.data.profile.name || user?.name || "");
                 setPhone(result.data.profile.phone ?? "");
                 setAddress(result.data.profile.address ?? "");
 
@@ -53,7 +56,7 @@ export default function Profile() {
         };
 
         loadProfile();
-    }, []);
+    }, [user?.name]);
 
     const handleSave = async () => {
         setError("");
@@ -65,7 +68,7 @@ export default function Profile() {
             const uploadResult = await uploadProfilePicture(profilePicture);
 
             if (!uploadResult.success) {
-                setError(uploadResult.message);
+                setError(uploadResult.message ?? "Unable to upload profile picture");
                 return;
             }
 
@@ -84,6 +87,24 @@ export default function Profile() {
         }
 
         setSuccess("Profile saved successfully!");
+        setIsEditingName(false);
+        if (user && result.data.user) {
+            setUser({ ...user, name: result.data.user.name });
+        }
+    };
+
+    const handleLogout = async () => {
+        setError("");
+
+        const { error: logoutError } = await supabase.auth.signOut();
+        if (logoutError) {
+            setError("Unable to log out. Please try again.");
+            return;
+        }
+
+        // Clear local state immediately so protected routes cannot use a stale session.
+        setUser(null);
+        navigate("/login", { replace: true });
     };
 
     if (loading) {
@@ -103,12 +124,21 @@ export default function Profile() {
                     Homebound
                 </Link>
 
-                <Link
-                    to="/"
-                    className="text-sm font-medium text-stone-600 hover:text-stone-900"
-                >
-                    Back to Home
-                </Link>
+                <div className="flex items-center gap-4">
+                    <Link
+                        to="/"
+                        className="text-sm font-medium text-stone-600 hover:text-stone-900"
+                    >
+                        Back to Home
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="text-sm font-medium text-red-600 hover:text-red-800"
+                    >
+                        Log out
+                    </button>
+                </div>
             </nav>
 
             <section className="mx-auto max-w-3xl px-6 py-12">
@@ -172,16 +202,26 @@ export default function Profile() {
 
 
                         <div>
-                            <label className="mb-2 block text-sm font-medium">
-                                Name
-                            </label>
+                            <div className="mb-2 flex items-center justify-between gap-4">
+                                <label className="text-sm font-medium">
+                                    Name
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditingName((editing) => !editing)}
+                                    className="text-sm font-medium text-stone-700 underline hover:text-stone-950"
+                                >
+                                    {isEditingName ? "Cancel" : "Edit name"}
+                                </button>
+                            </div>
 
                             <input
                                 type="text"
                                 value={name}
                                 onChange={(event) => setName(event.target.value)}
-                                className="w-full rounded-lg border border-stone-300 px-4 py-3 outline-none focus:border-stone-500"
-                                placeholder="Enter your name"
+                                readOnly={!isEditingName}
+                                className="w-full rounded-lg border border-stone-300 px-4 py-3 outline-none focus:border-stone-500 read-only:bg-stone-100 read-only:text-stone-600"
+                                placeholder="Your display name"
                             />
                         </div>
 

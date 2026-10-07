@@ -1,9 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "@/config/prisma.js";
+import { supabase } from "@/config/supabase.js";
 import { requireAuth } from "@/modules/auth/auth.middleware.js";
 
 export const profileRouter = Router();
+
+function inferMessagingRole(name: string) {
+    // Keep the messaging role aligned with the temporary registration rule.
+    return /\b(shelter|rescue)\b/i.test(name) ? "shelter_staff" : "user";
+}
 
 const profileSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -26,14 +32,14 @@ profileRouter.get("/", requireAuth, async (request, response) => {
         },
     });
 
-    if (!profile) {
-        return response.status(404).json({
-            message: "Profile not found",
-        });
-    }
-
     return response.status(200).json({
-        profile,
+        // A new Auth account can open Profile before saving any optional details.
+        profile: profile ?? {
+            name: typeof request.user.user_metadata.name === "string" ? request.user.user_metadata.name : "",
+            phone: "",
+            address: "",
+            profilePicturePath: undefined,
+        },
     });
 });
 
@@ -48,6 +54,27 @@ profileRouter.put("/", requireAuth, async (request, response) => {
     }
 
     const { name, phone, address, profilePicturePath } = result.data;
+    const previousName = request.user.user_metadata.name;
+
+    if (typeof previousName === "string" && previousName) {
+        // Messages resolve the signed-in account through its display name, so update its matching row too.
+        const messagingUser = await prisma.user.findFirst({ where: { name: previousName } });
+        if (messagingUser) {
+            await prisma.user.update({
+                where: { id: messagingUser.id },
+                data: { name, role: inferMessagingRole(name) },
+            });
+        }
+    }
+
+    const { error: authError } = await supabase.auth.admin.updateUserById(request.user.id, {
+        user_metadata: { ...request.user.user_metadata, name },
+    });
+
+    if (authError) {
+        console.error("Supabase profile name update error:", authError);
+        return response.status(500).json({ message: "Unable to update the display name" });
+    }
 
     const profile = await prisma.profile.upsert({
         where: {
@@ -71,5 +98,6 @@ profileRouter.put("/", requireAuth, async (request, response) => {
     return response.status(200).json({
         message: "Profile saved successfully",
         profile,
+        user: { id: request.user.id, name, email: request.user.email },
     });
 });

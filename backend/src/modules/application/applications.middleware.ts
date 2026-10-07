@@ -31,9 +31,6 @@ class Application {
             .eq("applicant_uid", userId)
             .order("created_at", { ascending: false });
 
-        console.log("Supabase data:", data);
-        console.log("Supabase error:", error);
-
         if (error) {
             return {
                 error,
@@ -41,8 +38,52 @@ class Application {
             };
         }
 
+        if (!data || data.length === 0) {
+            return {
+                data: [],
+                error: null,
+            };
+        }
+
+        const applicationIds = data.map(
+            application => application.id
+        );
+
+        const { data: responses, error: responsesError } = await supabase
+            .from("ApplicationResponses")
+            .select("application_id, response")
+            .in("application_id", applicationIds);
+
+        if (responsesError) {
+            return {
+                error: responsesError,
+                data: null,
+            };
+        }
+
+        const applicationsWithProgress = data.map(application => {
+            
+            const applicationResponses = (responses ?? []).filter(
+                response => response.application_id === application.id
+            );
+
+            const totalQuestions = applicationResponses.length;
+
+            const answeredQuestions = applicationResponses.filter(
+                response =>
+                    response.response &&
+                    response.response.trim().length > 0
+            ).length;
+
+            return {
+                ...application,
+                total_questions: totalQuestions,
+                answered_questions: answeredQuestions,
+            };
+        });
+
         return {
-            data,
+            data: applicationsWithProgress,
             error: null,
         };
     }

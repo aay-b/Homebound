@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { petSchema, photoSchema, validImage, validPhotoPath } from './pet.validation.js';
+import { idSchema, petSchema, photoSchema, validImage, validPhotoPath } from './pet.validation.js';
 
 const columns = 'id, pet_name, species, breed, age, description, health_info, allergies, photo_paths, available, shelter_id, shelter:Shelters(shelter_name)';
 const bucket = 'pet-photos';
@@ -107,6 +107,44 @@ export function createPetManagementRouter(db: SupabaseClient, requireAuth: Reque
         } catch (error) {
             console.error('Unable to create pet:', error);
             return res.status(500).json({ message: 'Unable to create the pet listing. Please try again.' });
+        }
+    });
+
+    router.get('/:id/edit', requireAuth, async (req, res) => {
+        if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: 'Invalid pet ID.' });
+        try {
+            const { data, error } = await db.from('Listings').select(columns).eq('id', req.params.id).maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ message: 'Pet listing not found.' });
+            if (!await canManage(req.user.id, String(data.shelter_id))) return res.status(403).json({ message: 'You cannot edit pets from this shelter.' });
+            return res.json({ pet: await presentPet(data as unknown as PetRow) });
+        } catch (error) {
+            console.error('Unable to load pet for editing:', error);
+            return res.status(500).json({ message: 'Unable to load the pet for editing.' });
+        }
+    });
+
+    router.put('/:id', requireAuth, async (req, res) => {
+        if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: 'Invalid pet ID.' });
+        try {
+            const parsed = petSchema.safeParse(req.body);
+            if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0].message });
+            const input = parsed.data;
+            const { data: pet, error: lookupError } = await db.from('Listings').select('shelter_id').eq('id', req.params.id).maybeSingle();
+            if (lookupError) throw lookupError;
+            if (!pet) return res.status(404).json({ message: 'Pet listing not found.' });
+            if (String(pet.shelter_id) !== input.shelter_id || !await canManage(req.user.id, input.shelter_id)) {
+                return res.status(403).json({ message: 'You cannot edit this listing or move it to another shelter.' });
+            }
+            if (!await validPhotos(input.photo_paths, input.shelter_id)) return res.status(400).json({ message: 'A photo is missing or does not belong to this shelter.' });
+            const { data, error } = await db.from('Listings').update(input)
+                .eq('id', req.params.id).eq('shelter_id', input.shelter_id).select('id').maybeSingle();
+            if (error) throw error;
+            if (!data) return res.status(404).json({ message: 'Pet listing not found.' });
+            return res.json({ pet: { id: String(data.id) } });
+        } catch (error) {
+            console.error('Unable to update pet:', error);
+            return res.status(500).json({ message: 'Unable to save the pet listing. Please try again.' });
         }
     });
 

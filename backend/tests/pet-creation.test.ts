@@ -142,3 +142,64 @@ test('a photo can be uploaded, attached to a new pet and shown with a signed URL
         assert.deepEqual(f.pets.find(pet => pet.id === 4).photo_paths, [path]);
     } finally { await f.close(); }
 });
+
+
+test('editing loads existing fields and saves changes without creating another listing', async () => {
+    const f = await fixture();
+    try {
+        const before = (await (await f.request('/1/edit')).json()).pet;
+        assert.equal(before.pet_name, 'Rex');
+        assert.equal(before.age, '2 years');
+        assert.deepEqual(before.photo_paths, []);
+        const response = await f.request('/1', 'PUT', {
+            pet_name: 'Rex updated', species: 'Dog', shelter_id: '1', age: '3 years', health_info: 'Vaccinated',
+        });
+        assert.equal(response.status, 200);
+        const after = (await (await f.request('/1')).json()).pet;
+        assert.equal(after.pet_name, 'Rex updated');
+        assert.equal(after.health_info, 'Vaccinated');
+        assert.equal(after.age, '3 years');
+        assert.equal(after.available, true);
+        assert.equal(f.pets.length, 3);
+        assert.deepEqual(f.writes, ['update']);
+    } finally { await f.close(); }
+});
+
+test('editing rejects missing access, invalid fields and attempts to change shelter', async () => {
+    const f = await fixture();
+    try {
+        const input = { pet_name: 'Rex', species: 'Dog', shelter_id: '1' };
+        assert.equal((await f.request('/1/edit', 'GET', undefined, '')).status, 401);
+        assert.equal((await f.request('/1', 'PUT', input, '')).status, 401);
+        assert.equal((await f.request('/1', 'PUT', input, 'ordinary-user')).status, 403);
+        assert.equal((await f.request('/2/edit')).status, 403);
+        assert.equal((await f.request('/2', 'PUT', input)).status, 403);
+        assert.equal((await f.request('/1', 'PUT', { ...input, shelter_id: '2' })).status, 403);
+        assert.equal((await f.request('/1', 'PUT', { ...input, pet_name: ' ' })).status, 400);
+        assert.equal((await f.request('/999/edit')).status, 404);
+        assert.equal((await f.request('/999', 'PUT', input)).status, 404);
+        assert.equal((await f.request('/9223372036854775808/edit')).status, 400);
+        assert.equal((await f.request('/invalid', 'PUT', input)).status, 400);
+        assert.deepEqual(f.writes, []);
+    } finally { await f.close(); }
+});
+
+test('editing can replace photos but cannot attach foreign or missing files', async () => {
+    const f = await fixture();
+    try {
+        const input = { pet_name: 'Rex', species: 'Dog', shelter_id: '1' };
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        const uploaded = await f.request('/photos', 'POST', { shelter_id: '1', content_type: 'image/png', data: png });
+        const { path } = await uploaded.json();
+        assert.equal((await f.request('/1', 'PUT', { ...input, photo_paths: [path] })).status, 200);
+        const saved = (await (await f.request('/1/edit')).json()).pet;
+        assert.deepEqual(saved.photo_paths, [path]);
+        assert.ok(saved.photos[0].includes(path));
+        for (const invalid of [`2/${staff}/${staff}.png`, `1/${staff}/${staff}.png`]) {
+            assert.equal((await f.request('/1', 'PUT', { ...input, photo_paths: [invalid] })).status, 400);
+        }
+        assert.deepEqual((await (await f.request('/1/edit')).json()).pet.photo_paths, [path]);
+        assert.equal((await f.request('/1', 'PUT', { ...input, photo_paths: [] })).status, 200);
+        assert.deepEqual((await (await f.request('/1')).json()).pet.photos, []);
+    } finally { await f.close(); }
+});

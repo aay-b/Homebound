@@ -5,6 +5,37 @@ import Application from "./applications.middleware.js";
 
 export const applicationRouter = Router();
 
+
+// Creates a new application for a given pet listing
+applicationRouter.post("/:listingId", requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const listingId = Number(req.params.listingId);
+        const { data, error } = await Application.createApplication(supabase, listingId, userId);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to create application",
+            });
+        }
+
+        return res.json({
+            success: true,
+            data,
+            count: data?.length ?? 0,
+        });
+    } catch (err) {
+        console.error("PUT / error:", err);
+    }
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
+
+
 // Get info for all of a user's applications
 applicationRouter.get("/", requireAuth, async (req, res) => {
     try {

@@ -1,6 +1,85 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 class Application {
+
+    static async createApplication(supabase: SupabaseClient, listingId: number, userId: string) {
+        if (!userId) {
+            return {
+                error: new Error("userId is required"),
+                data: null,
+            };
+        }
+        if (!listingId) {
+            return {
+                error: new Error("listingId is required"),
+                data: null,
+            };
+        }
+
+        const { data: questions, error: questionsError } = await supabase
+            .from("AdoptionQuestions")
+            .select(`
+                id,
+                question,
+                display_order
+            `)
+            .eq("listing_id", listingId)
+            .order("display_order", { ascending: true });
+
+        if (questionsError) {
+            return {
+                error: questionsError,
+                data: null,
+            };
+        }
+
+        const { data: application, error: applicationError } = await supabase
+            .from("Applications")
+            .insert({
+                applicant_id: userId,
+                listing_id: listingId,
+                application_status: "In Progress",
+                commitment_question: false,
+            })
+            .select()
+            .single();
+
+        if (applicationError) {
+            return {
+                error: applicationError,
+                data: null,
+            };
+        }
+        
+        const responses = (questions ?? []).map(question => ({
+            application_id: application.id,
+            question_id: question.id,
+            response: "",
+        }));
+
+        if (responses.length > 0) {
+            const { error: responsesError } = await supabase
+                .from("ApplicationResponses")
+                .insert(responses);
+
+            if (responsesError) {
+                await supabase
+                    .from("Applications")
+                    .delete()
+                    .eq("id", application.id);
+                return {
+                    error: responsesError,
+                    data: null,
+                };
+            }
+        }
+
+        return {
+            data: application,
+            error: null,
+        };
+    }
+
     
     static async getUserApplicationInfo(supabase: SupabaseClient, userId: string) {
         if (!userId) {
@@ -62,7 +141,7 @@ class Application {
         }
 
         const applicationsWithProgress = data.map(application => {
-            
+
             const applicationResponses = (responses ?? []).filter(
                 response => response.application_id === application.id
             );

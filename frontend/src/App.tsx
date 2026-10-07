@@ -25,6 +25,7 @@ export function App() {
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
                 <Route path="/pets/:id" element={<PetDetailPage />} />
+                <Route path="/pets/:id/apply" element={<PetDetailPage applying />} />
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>
                 <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>

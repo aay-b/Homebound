@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuth } from '../auth/auth.middleware.js';
 
 export function createPetRouter(supabase: SupabaseClient) {
     const router = Router();
 
     router.get('/:id', async (req, res) => {
         const id = req.params.id;
-        if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
+        if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
             return res.status(400).json({ message: 'Invalid pet ID.' });
         }
 
@@ -59,6 +60,32 @@ export function createPetRouter(supabase: SupabaseClient) {
         } catch (error) {
             console.error('Unable to load pet details:', error);
             return res.status(500).json({ message: 'Unable to load pet details. Please try again.' });
+        }
+    });
+
+    router.post('/:id/applications', requireAuth, async (req, res) => {
+        const id = req.params.id;
+        if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
+            return res.status(400).json({ message: 'Invalid pet ID.' });
+        }
+
+        try {
+            const { data, error } = await supabase.rpc('start_pet_application', {
+                p_listing_id: id,
+                p_applicant_uid: req.user.id,
+            });
+
+            if (error) {
+                if (error.code === 'PT404' || error.code === 'PT409') {
+                    return res.status(Number(error.code.slice(2))).json({ message: error.message });
+                }
+                throw error;
+            }
+
+            return res.json({ applicationId: data });
+        } catch (error) {
+            console.error('Unable to start application:', error);
+            return res.status(500).json({ message: 'Unable to start the application. Please try again.' });
         }
     });
 

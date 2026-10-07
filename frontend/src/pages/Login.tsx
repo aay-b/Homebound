@@ -3,7 +3,7 @@ import { loginUser } from "../services/authService";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../config/supabase";
 import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export default function Login() {
     const { setUser } = useAuth();
@@ -12,6 +12,7 @@ export default function Login() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const navigate = useNavigate();
+    const location = useLocation();
 
     const handleSubmit = async (
         event: React.FormEvent<HTMLFormElement>
@@ -38,7 +39,10 @@ export default function Login() {
 
         setUser(result.data.user);
         setSuccess("Login successful!");
-        navigate("/profile");
+        const returnTo = location.state?.returnTo;
+        navigate(typeof returnTo === "string" && /^\/pets\/[1-9]\d{0,18}\/apply$/.test(returnTo)
+            ? returnTo
+            : "/profile");
     };
 
     return (

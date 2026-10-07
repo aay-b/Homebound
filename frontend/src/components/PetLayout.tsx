@@ -11,6 +11,7 @@ export default function PetLayout({ children }: { children: ReactNode }) {
                     <Link to="/" className="text-xl font-bold tracking-widest">HOMEBOUND</Link>
                     <div className="flex flex-wrap gap-5 text-sm">
                         <Link to="/">Home</Link>
+                        <Link to="/pets">Find a Pet</Link>
                         {user && <Link to="/pets/manage">Manage Listings</Link>}
                         {user && <Link to="/applications">My Applications</Link>}
                         <Link to={user ? "/profile" : "/login"}>{user ? "My Profile" : "Log in"}</Link>

@@ -20,3 +20,5 @@ export type ManagedShelter = {
     id: string;
     shelter_name: string;
 };
+
+export type PetSummary = Pick<Pet, 'id' | 'pet_name' | 'species' | 'breed' | 'age' | 'photos' | 'available' | 'shelter_name'>;

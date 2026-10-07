@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import type { Pet } from "../types/pet";
+import type { PetSummary } from "../types/pet";
 
-export default function PetCard({ pet }: { pet: Pet }) {
+export default function PetCard({ pet }: { pet: PetSummary }) {
     return (
         <Link to={`/pets/${pet.id}`} className="overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:shadow-md focus-visible:outline-2 focus-visible:outline-stone-700">
             {pet.photos[0] ? (

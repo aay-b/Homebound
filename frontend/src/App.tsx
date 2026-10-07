@@ -7,18 +7,30 @@ import { MessagesPage } from '@/pages/MessagesPage'
 import Profile from '@/pages/Profile'
 import Register from '@/pages/Register'
 
+import UserApplicationDashboard from "./pages/UserApplicationDashboard";
+import UserApplicationView from "./pages/UserApplicationView";
+import ShelterApplicationDashboard from "./pages/ShelterApplicationDashboard";
+import ShelterApplicationView from "./pages/ShelterApplicationView";
+
+
 export function App() {
-  return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  )
+    return (
+        <AuthProvider>
+        <BrowserRouter>
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+
+                <Route path="/applications" element={<UserApplicationDashboard/>}/>
+                <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>
+                <Route path="/jacob/shelter/listings/:listingId/applications" element={<ShelterApplicationDashboard/>}/>
+                <Route path="/jacob/shelter/listings/:listingId/applications/:applicationId" element={<ShelterApplicationView/>}/>
+
+            </Routes>
+        </BrowserRouter>
+        </AuthProvider>
+    );
 }

@@ -96,7 +96,7 @@ function ApplicationView() {
         fetchResponses();
     }, [applicationId]);
 
-    const missingResponses = !responses.every((response) => response.response.length > 0);
+    const missingResponses = !responses.every((response) => response.response.trim().length > 0);
 
     function updateResponse(responseId: number, newAnswer: string) {
         setResponses(current =>

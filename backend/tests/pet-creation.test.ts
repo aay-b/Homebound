@@ -237,3 +237,51 @@ test('removal rejects unauthorized users and invalid or missing listings', async
         assert.equal(f.pets[1].available, true);
     } finally { await f.close(); }
 });
+
+
+test('public browsing shows available pets and hides a pet after removal', async () => {
+    const f = await fixture();
+    try {
+        const before = await f.request('/', 'GET', undefined, '');
+        assert.equal(before.status, 200);
+        const { pets } = await before.json();
+        assert.deepEqual(pets.map((pet: any) => pet.id), ['1', '2']);
+        assert.equal(pets[0].pet_name, 'Rex');
+        assert.equal(pets[0].photo_paths, undefined);
+        assert.equal(pets[0].shelter_id, undefined);
+        assert.equal((await f.request('/1', 'DELETE')).status, 200);
+        const after = await (await f.request('/', 'GET', undefined, '')).json();
+        assert.deepEqual(after.pets.map((pet: any) => pet.id), ['2']);
+        assert.equal((await f.request('/1')).status, 200);
+    } finally { await f.close(); }
+});
+
+test('browse pages return up to 24 pets and indicate when there are no more', async () => {
+    const f = await fixture();
+    try {
+        for (let id = 4; id < 32; id++) f.pets.push({ ...f.pets[0], id });
+        const first = await (await f.request('/')).json();
+        assert.equal(first.pets.length, 24);
+        assert.equal(first.nextOffset, 24);
+        const second = await (await f.request('/?offset=24')).json();
+        assert.equal(second.pets.length, 6);
+        assert.equal(second.nextOffset, null);
+        assert.equal(first.pets.some((pet: any) => second.pets.some((item: any) => item.id === pet.id)), false);
+        for (const offset of ['-1', 'abc', '1.5']) assert.equal((await f.request(`/?offset=${offset}`)).status, 400);
+        f.pets.forEach(pet => { pet.available = false; });
+        assert.deepEqual(await (await f.request('/')).json(), { pets: [], nextOffset: null });
+    } finally { await f.close(); }
+});
+
+test('browse cards receive a signed cover photo without internal storage paths', async () => {
+    const f = await fixture();
+    try {
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        const { path } = await (await f.request('/photos', 'POST', { shelter_id: '1', content_type: 'image/png', data: png })).json();
+        assert.equal((await f.request('/1', 'PUT', { pet_name: 'Rex', species: 'Dog', shelter_id: '1', photo_paths: [path] })).status, 200);
+        const pet = (await (await f.request('/', 'GET', undefined, '')).json()).pets.find((item: any) => item.id === '1');
+        assert.equal(pet.photos.length, 1);
+        assert.ok(pet.photos[0].includes(path));
+        assert.equal(pet.photo_paths, undefined);
+    } finally { await f.close(); }
+});

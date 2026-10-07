@@ -5,6 +5,38 @@ import { requireAuth } from '../auth/auth.middleware.js';
 export function createPetRouter(supabase: SupabaseClient) {
     const router = Router();
 
+    router.get('/', async (req, res) => {
+        const offset = Number(req.query.offset ?? 0);
+        if (!Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ message: 'Invalid page.' });
+        const pageSize = 24;
+        try {
+            const { data, error } = await supabase.from('Listings')
+                .select('id, pet_name, species, breed, age, photo_paths, available, shelter:Shelters(shelter_name)')
+                .eq('available', true).order('created_at', { ascending: false }).order('id', { ascending: false })
+                .range(offset, offset + pageSize);
+            if (error) throw error;
+            const rows = data ?? [];
+            const pets = await Promise.all(rows.slice(0, pageSize).map(async row => {
+                let photos: string[] = [];
+                if (row.photo_paths.length) {
+                    const { data: signed, error: photoError } = await supabase.storage.from('pet-photos')
+                        .createSignedUrls(row.photo_paths.slice(0, 1), 3600);
+                    if (photoError) throw photoError;
+                    photos = (signed ?? []).map(photo => photo.signedUrl).filter((url): url is string => Boolean(url));
+                }
+                return {
+                    id: String(row.id), pet_name: row.pet_name || 'Unnamed pet',
+                    species: row.species, breed: row.breed, age: row.age, available: row.available,
+                    shelter_name: (row.shelter as unknown as { shelter_name: string })?.shelter_name || 'Shelter', photos,
+                };
+            }));
+            return res.json({ pets, nextOffset: rows.length > pageSize ? offset + pageSize : null });
+        } catch (error) {
+            console.error('Unable to browse pets:', error);
+            return res.status(500).json({ message: 'Unable to load pets. Please try again.' });
+        }
+    });
+
     router.get('/:id', async (req, res) => {
         const id = req.params.id;
         if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {

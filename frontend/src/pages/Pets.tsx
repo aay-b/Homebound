@@ -39,7 +39,7 @@ export default function Pets() {
 
     return (
         <PetLayout>
-            <h1 className="text-3xl font-bold">Find a pet</h1>
+            <h1 className="text-3xl font-bold">Find a Pet</h1>
             <p className="mt-3 mb-8 text-stone-600">Meet the pets looking for a home. Select a pet to learn more.</p>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {pets.map(pet => <PetCard key={pet.id} pet={pet} />)}

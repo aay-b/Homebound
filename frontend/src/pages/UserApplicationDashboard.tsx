@@ -206,7 +206,7 @@ function UserApplicationDashboard() {
 
                                             <button
                                                 className="mt-4 w-fit rounded-lg border border-[#757A5E] px-4 py-2 text-sm font-medium text-[#111111] hover:bg-[#F1F1EC]"
-                                                onClick={() => navigate("/NOTIMPLEMENTED")}
+                                                onClick={() => navigate(`/pets/${application.listing_id}`)}
                                             >
                                                 To Pet Listing
                                             </button>

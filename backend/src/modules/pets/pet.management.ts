@@ -68,7 +68,25 @@ export function createPetManagementRouter(db: SupabaseClient, requireAuth: Reque
             const { data, error } = await db.from('Listings').select(columns)
                 .in('shelter_id', shelters.map(shelter => shelter.id)).order('created_at', { ascending: false });
             if (error) throw error;
-            return res.json({ pets: await Promise.all((data ?? []).map(row => presentPet(row as unknown as PetRow))) });
+            const rows = data ?? [];
+            const listingIds = rows.map(row => row.id);
+            let applications: { listing_id: number; staff_seen: boolean }[] = [];
+            if (listingIds.length) {
+                const { data: applicationData, error: applicationError } = await db.from('Applications')
+                    .select('listing_id, staff_seen').in('listing_id', listingIds).eq('application_status', 'Pending');
+                if (applicationError) throw applicationError;
+                applications = applicationData ?? [];
+            }
+            const pets = await Promise.all(rows.map(async row => {
+                const petApplications = applications.filter(application => String(application.listing_id) === String(row.id));
+                return {
+                    ...await presentPet(row as unknown as PetRow),
+                    application_count: petApplications.length,
+                    new_apps: petApplications.some(application => !application.staff_seen),
+                };
+            }));
+
+            return res.json({ pets });
         } catch (error) {
             console.error('Unable to load managed pets:', error);
             return res.status(500).json({ message: 'Unable to load your pet listings.' });

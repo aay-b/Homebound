@@ -483,33 +483,52 @@ class Application {
             };
         }
 
-        const applicationsWithNames = await Promise.all(
-            (data ?? []).map(async (application) => {
+        const applicationsWithUserInfo = await Promise.all(
+            (data ?? []).map(async application => {
                 const { data: authData, error: authError } =
-                    await supabase.auth.admin.getUserById(
-                        application.applicant_uid
-                    );
+                    await supabase.auth.admin.getUserById(application.applicant_uid);
 
                 if (authError) {
-                    console.error(
-                        "Unable to retrieve applicant:",
-                        application.applicant_uid,
-                        authError
-                    );
+                    console.error("Unable to get applicant auth info:", authError);
+                }
+
+                const { data: profile, error: profileError } = await supabase
+                    .from("Profile")
+                    .select("profilePicturePath")
+                    .eq("userId", application.applicant_uid)
+                    .maybeSingle();
+
+                if (profileError) {
+                    console.error("Unable to get applicant profile:", profileError);
+                }
+
+                let applicantProfilePicture: string | null = null;
+
+                if (profile?.profilePicturePath) {
+                    const { data: pictureData, error: pictureError } = await supabase.storage
+                        .from("profile-pictures")
+                        .createSignedUrl(profile.profilePicturePath, 3600);
+
+                    if (pictureError) {
+                        console.error("Unable to get applicant profile picture:", pictureError);
+                    } else {
+                        applicantProfilePicture = pictureData.signedUrl;
+                    }
                 }
 
                 return {
                     ...application,
-                    applicant_name: authData.user?.user_metadata.name,
+                    applicant_name: authData.user?.user_metadata.name ?? "Unknown User",
+                    applicant_profile_picture: applicantProfilePicture,
                 };
             })
         );
 
         return {
-            data: applicationsWithNames,
+            data: applicationsWithUserInfo,
             error: null,
         };
     }
-}
+};
 
 export default Application;

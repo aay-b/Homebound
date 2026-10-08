@@ -63,6 +63,18 @@ export function createPetRouter(supabase: SupabaseClient) {
 
             if (shelterError) throw shelterError;
 
+            const { data: applications, error: applicationsError } = await supabase
+                .from("Applications")
+                .select("id, staff_seen")
+                .eq("listing_id", id)
+                .eq("application_status", "Pending");
+
+            if (applicationsError) throw applicationsError;
+            const applicationCount = applications?.length ?? 0;
+            const newApps = (applications ?? []).some(
+                application => application.staff_seen === false
+            );
+
             let photos: string[] = [];
             if (pet.photo_paths.length > 0) {
                 const { data, error: photoError } = await supabase.storage
@@ -87,6 +99,8 @@ export function createPetRouter(supabase: SupabaseClient) {
                     allergies: pet.allergies,
                     photos,
                     available: pet.available,
+                    application_count: applicationCount,
+                    new_apps: newApps,
                 },
             });
         } catch (error) {

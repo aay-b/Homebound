@@ -107,7 +107,7 @@ export default function PetForm() {
         <PetLayout>
             <div className="mx-auto max-w-3xl">
                 <Link to={id ? `/pets/${id}` : "/pets/manage"} className="text-sm underline">← Back</Link>
-                <h1 className="mt-6 text-3xl font-bold">{id ? "Edit pet listing" : "Add a pet"}</h1>
+                <h1 className="mt-6 text-3xl font-bold">{id ? "Edit Pet Listing" : "Add a pet"}</h1>
                 <p className="mt-3 text-stone-600">Share the details that help this pet find the right home. Fields marked * are required.</p>
                 {loading && <p className="mt-6" role="status">Loading form...</p>}
                 {error && <p role="alert" className="my-5 rounded-xl bg-red-50 p-4 text-red-800">{error}</p>}

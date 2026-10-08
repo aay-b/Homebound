@@ -3,7 +3,7 @@ import type { PetSummary } from "../types/pet";
 
 export default function PetCard({ pet }: { pet: PetSummary }) {
     return (
-        <Link to={`/pets/${pet.id}`} className="overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:shadow-md focus-visible:outline-2 focus-visible:outline-stone-700">
+        <Link to={`/pets/${pet.id}`} className="block overflow-hidden rounded-2xl border border-stone-200 bg-white transition hover:shadow-md focus-visible:outline-2 focus-visible:outline-stone-700">
             {pet.photos[0] ? (
                 <img src={pet.photos[0]} alt={pet.pet_name} className="aspect-[4/3] w-full object-cover" loading="lazy" />
             ) : (

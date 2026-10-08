@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PetLayout from "../components/PetLayout";
-import { getManagedShelters, getManagedPet, createPet, updatePet, uploadPetPhoto } from "../services/petManagementService";
+import { getManagedShelters, getManagedPet, createPet, updatePet, uploadPetPhoto, getAdoptionQuestions, saveAdoptionQuestions } from "../services/petManagementService";
 import type { ManagedShelter, PetInput } from "../types/pet";
 
 const emptyPet: PetInput = {
@@ -23,6 +23,8 @@ export default function PetForm() {
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState("");
+    const [questions, setQuestions] = useState<string[]>([]);
+    const [questionsChanged, setQuestionsChanged] = useState(false);
     const objectUrls = useRef<string[]>([]);
 
     useEffect(() => () => objectUrls.current.forEach(url => URL.revokeObjectURL(url)), []);
@@ -34,10 +36,16 @@ export default function PetForm() {
         async function load() {
             const allowed = await getManagedShelters();
             if (!allowed.length) throw new Error("Only assigned shelter staff can create or edit pet listings.");
-            const pet = id ? await getManagedPet(id) : null;
+            const [pet, existingQuestions] = id
+                ? await Promise.all([
+                    getManagedPet(id),
+                    getAdoptionQuestions(id)
+                ])
+                : [null, []];
             if (pet && !allowed.some(shelter => shelter.id === pet.shelter_id)) throw new Error("This listing belongs to another shelter.");
             if (!active) return;
             setShelters(allowed);
+            setQuestions(existingQuestions);
             setForm(pet ? {
                 pet_name: pet.pet_name, species: pet.species, breed: pet.breed, age: pet.age,
                 description: pet.description, health_info: pet.health_info, allergies: pet.allergies,
@@ -94,20 +102,49 @@ export default function PetForm() {
         event.preventDefault();
         if (saving || uploading) return;
         setError("");
-        if (!form.pet_name.trim() || !form.species.trim()) { setError("Pet name and species are required."); return; }
+        if (!form.pet_name.trim() || !form.species.trim()) {
+            setError("Pet name and species are required.");
+            return;
+        }
         setSaving(true);
         try {
             const pet = id ? await updatePet(id, form) : await createPet(form);
-            navigate(`/pets/${pet.id}`);
-        } catch (error) { setError(error instanceof Error ? error.message : "Unable to save pet."); }
-        finally { setSaving(false); }
+            if (!id || questionsChanged) {
+                await saveAdoptionQuestions(
+                    pet.id,
+                    questions.map(question => question.trim()).filter(question => question.length > 0)
+                );
+            }
+            navigate(`/pets/${pet.id}`, { replace: true });
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Unable to save pet.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    function addQuestion() {
+        setQuestions(current => [...current, ""]);
+        setQuestionsChanged(true);
+    }
+
+    function removeQuestion(index: number) {
+        setQuestions(current => current.filter((_, questionIndex) => questionIndex !== index));
+        setQuestionsChanged(true);
+    }
+
+    function changeQuestion(index: number, value: string) {
+        setQuestions(current => current.map((question, questionIndex) =>
+            questionIndex === index ? value : question
+        ));
+        setQuestionsChanged(true);
     }
 
     return (
         <PetLayout>
             <div className="mx-auto max-w-3xl">
                 <Link to={id ? `/pets/${id}` : "/pets/manage"} className="text-sm underline">← Back</Link>
-                <h1 className="mt-6 text-3xl font-bold">{id ? "Edit Pet Listing" : "Add a pet"}</h1>
+                <h1 className="mt-6 text-3xl font-bold">{id ? "Edit Pet Listing" : "Add a Pet"}</h1>
                 <p className="mt-3 text-stone-600">Share the details that help this pet find the right home. Fields marked * are required.</p>
                 {loading && <p className="mt-6" role="status">Loading form...</p>}
                 {error && <p role="alert" className="my-5 rounded-xl bg-red-50 p-4 text-red-800">{error}</p>}
@@ -213,12 +250,32 @@ export default function PetForm() {
                                 </div>)}
                             </div>
                         </div>
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <label className="font-medium">Adoption application questions</label>
+                                    <p className="mt-2 text-sm text-stone-600">Add the questions applicants should answer when applying to adopt this pet.</p>
+                                </div>
+                                <button type="button" onClick={addQuestion} className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 text-xl hover:bg-stone-100">+</button>
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                                {questions.map((question, index) => (
+                                    <div key={index} className="flex items-center gap-3">
+                                        <input value={question} onChange={event => changeQuestion(index, event.target.value)} placeholder={`Question ${index + 1}`} maxLength={500} className={fieldClass} />
+                                        <button type="button" onClick={() => removeQuestion(index)} className="mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-300 text-xl text-red-700 hover:bg-red-50">−</button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {questions.length === 0 && <p className="mt-4 text-sm text-stone-500">No adoption questions have been added yet.</p>}
+                        </div>
                         <div className="flex items-center gap-5">
                             <button type="submit" className="rounded-full bg-stone-900 px-7 py-3 text-white">{saving ? "Saving..." : id ? "Save changes" : "Create listing"}</button>
                             <Link to={id ? `/pets/${id}` : "/pets/manage"} className="underline">Cancel</Link>
                         </div>
                     </fieldset>
-                    {uploading && <p className="mt-4" role="status">Uploading photos...</p>}
+                    {uploading && <p className="mt-4" role="status">Uploading photos...</p>}  
                 </form>}
             </div>
         </PetLayout>

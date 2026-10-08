@@ -9,6 +9,7 @@ function UserApplicationDashboard() {
         listing_id: number;
         listing: {
             pet_name: string;
+            pet_photo: string | null;
             shelter: {
                 shelter_name: string;
             };
@@ -38,6 +39,7 @@ function UserApplicationDashboard() {
             );
 
             const result = await response.json();
+console.error("APPLICATIONS RESPONSE:", result);
             setApplications(result.data);
             setApplicationsLoading(false);
         }
@@ -165,7 +167,6 @@ function UserApplicationDashboard() {
                         </span>
                         Back
                     </button>
-
                     <div className="mb-4 flex items-center justify-between">
                         <h1 className="text-3xl font-semibold">
                             My Applications
@@ -190,13 +191,22 @@ function UserApplicationDashboard() {
                                         key={application.id}
                                         className="flex items-center gap-6 rounded-2xl border border-[#757A5E] bg-white p-5"
                                     >
-                                        <div className="w-32 shrink-0">
-                                            <div className="aspect-square rounded-xl bg-stone-200">
-                                            </div>
+                                        <div className="h-32 w-32 shrink-0 overflow-hidden rounded-xl bg-stone-200">
+                                            {application.listing.pet_photo ? (
+                                                <img
+                                                    src={application.listing.pet_photo}
+                                                    alt={application.listing.pet_name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full w-full items-center justify-center text-sm text-stone-500">
+                                                    No photo
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex min-w-0 flex-1 flex-col justify-center -mr-12">
-                                        `   <h2 className="truncate text-2xl font-bold leading-tight text-[#111111]">
+                                            <h2 className="truncate text-2xl font-bold leading-tight text-[#111111]">
                                                 {application.listing.pet_name}
                                             </h2>
 

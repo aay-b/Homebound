@@ -5,6 +5,98 @@ import { requireAuth } from '../auth/auth.middleware.js';
 export function createPetRouter(supabase: SupabaseClient) {
     const router = Router();
 
+    router.get('/manage/:id/questions', async (req, res) => {
+        const id = req.params.id;
+
+        if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id)) {
+            return res.status(400).json({ message: 'Invalid pet ID.' });
+        }
+
+        try {
+            const { data: listing, error: listingError } = await supabase
+                .from("Listings")
+                .select("question_iteration")
+                .eq("id", id)
+                .single();
+
+            if (listingError) throw listingError;
+
+            const { data, error } = await supabase
+                .from("AdoptionQuestions")
+                .select("id, question")
+                .eq("listing_id", id)
+                .eq("iteration_num", listing.question_iteration)
+                .order("display_order", { ascending: true });
+
+            if (error) throw error;
+
+            return res.json({ data: data ?? [] });
+        } catch (error) {
+            console.error('Unable to load adoption questions:', error);
+            return res.status(500).json({ message: 'Unable to load adoption questions.' });
+        }
+    });
+
+    router.put('/manage/:id/questions', async (req, res) => {
+        const id = req.params.id;
+        const questions = req.body.questions;
+
+        if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id)) {
+            return res.status(400).json({ message: 'Invalid pet ID.' });
+        }
+
+        if (!Array.isArray(questions)) {
+            return res.status(400).json({ message: 'Questions must be an array.' });
+        }
+
+        try {
+            const cleanedQuestions = questions
+                .filter((question): question is string => typeof question === "string")
+                .map(question => question.trim())
+                .filter(question => question.length > 0);
+
+            const { data: listing, error: listingError } = await supabase
+                .from("Listings")
+                .select("question_iteration")
+                .eq("id", id)
+                .single();
+
+            if (listingError) throw listingError;
+
+            const newIteration = Number(listing.question_iteration) + 1;
+
+            const { error: updateError } = await supabase
+                .from("Listings")
+                .update({ question_iteration: newIteration })
+                .eq("id", id);
+
+            if (updateError) throw updateError;
+
+            if (cleanedQuestions.length > 0) {
+                const { data, error } = await supabase
+                    .from("AdoptionQuestions")
+                    .insert(
+                        cleanedQuestions.map((question, index) => ({
+                            listing_id: id,
+                            question,
+                            display_order: index + 1,
+                            iteration_num: newIteration,
+                        }))
+                    )
+                    .select("id, question, display_order, iteration_num");
+
+                if (error) throw error;
+
+                return res.json({ data });
+            }
+
+            return res.json({ data: [] });
+        } catch (error) {
+            console.error('Unable to save adoption questions:', error);
+            return res.status(500).json({ message: 'Unable to save adoption questions.' });
+        }
+    });
+
     router.get('/', async (req, res) => {
         const offset = Number(req.query.offset ?? 0);
         if (!Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ message: 'Invalid page.' });

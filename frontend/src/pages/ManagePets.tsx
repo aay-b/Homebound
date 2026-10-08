@@ -44,7 +44,7 @@ export default function ManagePets() {
                 <p role="alert" className="mt-6 text-red-700">{error}</p>
             ) : (
                 <>
-                    <Link to="/pets/new" className="my-6 inline-block rounded-full bg-stone-900 px-6 py-3 text-white">Add a pet</Link>
+                    <Link to="/pets/new" className="my-6 inline-block rounded-full bg-stone-900 px-6 py-3 text-white">Add a Pet</Link>
                     {pets.length === 0 && <p>Your shelter has no pet listings yet.</p>}
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {pets.map(pet => (

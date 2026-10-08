@@ -96,6 +96,7 @@ class Application {
                 listing_id,
                 listing:listing_id (
                     pet_name,
+                    photo_paths,
                     shelter:shelter_id (
                         shelter_name
                     )
@@ -140,33 +141,64 @@ class Application {
             };
         }
 
-        const applicationsWithProgress = data.map(application => {
+        const applicationsWithProgress = await Promise.all(
+            data.map(async application => {
 
-            const applicationResponses = (responses ?? []).filter(
-                response => response.application_id === application.id
-            );
+                const applicationResponses = (responses ?? []).filter(
+                    response => response.application_id === application.id
+                );
 
-            const totalQuestions = applicationResponses.length;
+                const totalQuestions = applicationResponses.length;
 
-            const answeredQuestions = applicationResponses.filter(
-                response =>
-                    response.response &&
-                    response.response.trim().length > 0
-            ).length;
+                const answeredQuestions = applicationResponses.filter(
+                    response =>
+                        response.response &&
+                        response.response.trim().length > 0
+                ).length;
 
-            return {
-                ...application,
-                total_questions: totalQuestions,
-                answered_questions: answeredQuestions,
-            };
-        });
+                const listing = application.listing as unknown as {
+                    pet_name: string;
+                    photo_paths: string[];
+                    shelter: { shelter_name: string } | { shelter_name: string }[];
+                };
 
+                const shelter = Array.isArray(listing?.shelter)
+                    ? listing.shelter[0]
+                    : listing?.shelter;
+
+                let petPhoto: string | null = null;
+
+                if (listing?.photo_paths?.length) {
+                    const { data: photoData, error: photoError } = await supabase.storage
+                        .from("pet-photos")
+                        .createSignedUrl(listing.photo_paths[0], 3600);
+
+                    if (photoError) {
+                        console.error("Unable to load pet photo:", photoError);
+                    } else {
+                        petPhoto = photoData.signedUrl;
+                    }
+                }
+
+                return {
+                    ...application,
+                    listing: {
+                        ...listing,
+                        shelter: {
+                            ...shelter,
+                        },
+                        pet_photo: petPhoto,
+                    },
+                    total_questions: totalQuestions,
+                    answered_questions: answeredQuestions,
+                };
+            })
+        );
         return {
             data: applicationsWithProgress,
             error: null,
         };
     }
-
 
     static async getApplicationInfo(supabase: SupabaseClient, application_id: number) {
         if (!application_id) {
@@ -334,7 +366,9 @@ class Application {
 
         const { data, error } = await supabase
             .from("Applications")
-            .update({ application_status: "Pending" })
+            .update({ application_status: "Pending",
+                      submitted_at: new Date().toISOString(),
+             })
             .eq("id", applicationId)
 
         if (error) {
@@ -349,29 +383,34 @@ class Application {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
-            .select("application_status")
+            .update({
+                application_status: "Approved",
+                decision_feedback: decisionFeedback
+            })
             .eq("id", applicationId)
-            .single();
+            .eq("application_status", "Pending")
+            .select("id")
+            .maybeSingle();
 
         if (lookupError) {
             return { error: lookupError };
         }
 
-        if (application.application_status !== "Pending") {
+        if (!application) {
+            const { data: application, error: lookupError } = await supabase
+                .from("Applications")
+                .select("application_status")
+                .eq("id", applicationId)
+                .single();
+
+            if (lookupError) {
+                return { error: lookupError };
+            }
+
             return {
                 error: new Error(`This application's status has already been changed to ${application.application_status}.`),
                 status: 409
             };
-        }
-
-        const { data, error } = await supabase
-            .from("Applications")
-            .update({ application_status: "Approved",
-                      decision_feedback: decisionFeedback})
-            .eq("id", applicationId)
-
-        if (error) {
-            return { error };
         }
 
         return { error: null };
@@ -382,61 +421,69 @@ class Application {
             
         const { data: application, error: lookupError } = await supabase
             .from("Applications")
-            .select("application_status")
+            .update({
+                application_status: "Denied",
+                decision_feedback: decisionFeedback
+            })
             .eq("id", applicationId)
-            .single();
+            .eq("application_status", "Pending")
+            .select("id")
+            .maybeSingle();
 
         if (lookupError) {
             return { error: lookupError };
         }
 
-        if (application.application_status !== "Pending") {
+        if (!application) {
+            const { data: application, error: lookupError } = await supabase
+                .from("Applications")
+                .select("application_status")
+                .eq("id", applicationId)
+                .single();
+
+            if (lookupError) {
+                return { error: lookupError };
+            }
+
             return {
                 error: new Error(`This application's status has already been changed to ${application.application_status}.`),
                 status: 409
             };
         }
-
-        const { data, error } = await supabase
-            .from("Applications")
-            .update({ application_status: "Denied",
-                      decision_feedback: decisionFeedback})
-            .eq("id", applicationId)
-
-        if (error) {
-            return { error };
-        }
-
         return { error: null };
     }
 
 
     static async withdrawApplication(supabase: SupabaseClient, applicationId: number, userId: string) {
-            
-        const { data: application, error: lookupError } = await supabase
-            .from("Applications")
-            .select("application_status")
-            .eq("id", applicationId)
-            .eq("applicant_uid", userId)
-            .single();
-
-        if (lookupError) {
-            return { error: lookupError };
-        }
-
-        if (application.application_status !== "Pending") {
-            return {
-                error: new Error("This application's status has already been changed.")
-            };
-        }
-
-        const { data, error } = await supabase
+        const { data: application, error } = await supabase
             .from("Applications")
             .update({ application_status: "Withdrawn" })
             .eq("id", applicationId)
+            .eq("applicant_uid", userId)
+            .eq("application_status", "Pending")
+            .select("id")
+            .maybeSingle();
 
         if (error) {
             return { error };
+        }
+
+        if (!application) {
+            const { data: currentApplication, error: lookupError } = await supabase
+                .from("Applications")
+                .select("application_status")
+                .eq("id", applicationId)
+                .eq("applicant_uid", userId)
+                .single();
+
+            if (lookupError) {
+                return { error: lookupError };
+            }
+
+            return {
+                error: new Error(`This application's status has already been changed to ${currentApplication.application_status}.`),
+                status: 409
+            };
         }
 
         return { error: null };

@@ -529,6 +529,36 @@ class Application {
             error: null,
         };
     }
+
+
+    static async markPetApplicationsSeen(supabase: SupabaseClient, listingId: number) {
+        if (!listingId) {
+            return {
+                error: new Error("listingId is required"),
+                data: null,
+            };
+        }
+
+        const { data, error } = await supabase
+            .from("Applications")
+            .update( {staff_seen: true})
+            .eq("listing_id", listingId)
+
+        console.log("Supabase data:", data);
+        console.log("Supabase error:", error);
+
+        if (error) {
+            return {
+                error,
+                data: null,
+            };
+        }
+
+        return {
+            data,
+            error: null,
+        }
+    }
 };
 
 export default Application;

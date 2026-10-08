@@ -16,7 +16,7 @@ export type Pet = {
     new_apps: boolean,
 };
 
-export type PetInput = Omit<Pet, "id" | "shelter_name" | "available" | "photos">;
+export type PetInput = Omit<Pet, "id" | "shelter_name" | "available" | "photos" | "application_count" | "new_apps">;
 
 export type ManagedShelter = {
     id: string;

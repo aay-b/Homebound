@@ -71,6 +71,35 @@ function ShelterApplicationDashboard() {
         fetchDashboard();
     }, [listingId]);
 
+
+    useEffect(() => {
+        async function markSeen() {
+            if (!listingId) return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const response = await fetch(`http://localhost:3000/api/applications/shelter/${listingId}/mark`,
+                    {
+                        method: "PATCH",
+                        headers: {
+                            Authorization: `Bearer ${session?.access_token}`,
+                        },
+                    }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    console.error("Unable to mark applications as seen:", result);
+                }
+            } catch (error) {
+                console.error("Unable to mark applications as seen:", error);
+            }
+        }
+
+        markSeen();
+    }, [listingId]);
+
+
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
             {applicationsLoading ? (

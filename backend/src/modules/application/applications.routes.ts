@@ -93,6 +93,41 @@ applicationRouter.get("/shelter/:listingId", async (req, res) => {
     });
 });
 
+
+// CURRENTLY LACKING AUTHENTICATION
+// Mark all applications for a specific pet listing as seen
+applicationRouter.patch("/shelter/:listingId/mark", async (req, res) => {
+    try {
+        const listingId = Number(req.params.listingId);
+        if (!listingId) {
+            return res.status(400).json({
+                message: "Invalid listing ID",
+            });
+        }
+        const { data, error } = await Application.markPetApplicationsSeen(supabase, listingId);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to mark applications",
+            });
+        }
+
+        return res.json({
+            success: true,
+            data,
+        });
+    } catch (err) {
+        console.error("GET / error:", err);
+    }
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
+
+
 // CURRENTLY LACKING AUTHENTICATION
 // Get a single application by application ID
 applicationRouter.get("/:applicationId", async (req, res) => {

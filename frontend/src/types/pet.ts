@@ -12,9 +12,11 @@ export type Pet = {
     available: boolean;
     shelter_id: string;
     shelter_name: string;
+    application_count: number,
+    new_apps: boolean,
 };
 
-export type PetInput = Omit<Pet, "id" | "shelter_name" | "available" | "photos">;
+export type PetInput = Omit<Pet, "id" | "shelter_name" | "available" | "photos" | "application_count" | "new_apps">;
 
 export type ManagedShelter = {
     id: string;

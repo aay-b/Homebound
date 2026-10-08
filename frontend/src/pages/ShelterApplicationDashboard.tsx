@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../config/supabase";
 
 function ShelterApplicationDashboard() {
+
+    type Pet = {
+        id: string;
+        pet_name: string;
+        shelter_name: string;
+        species: string;
+        breed: string;
+        age: string;
+        photos: string[];
+        available: boolean;
+    };
 
     type Application = {
         id: number;
@@ -14,25 +25,80 @@ function ShelterApplicationDashboard() {
         };
         created_at: string;
         submitted_at: string;
+        applicant_profile_picture: string | null;
     };
 
     const navigate = useNavigate();
+    const { listingId } = useParams();
     const [applications, setApplications] = useState<Application[]>([]);
+    const [pet, setPet] = useState<Pet | null>(null);
     const [applicationsLoading, setApplicationsLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchApplications() {
-            const listingId = 1;
-            const response = await fetch(
-                `http://localhost:3000/api/applications/shelter/${listingId}`
-            );
-            const result = await response.json();
-            setApplications(result.data);
-            setApplicationsLoading(false);
+        async function fetchDashboard() {
+            if (!listingId) return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const [applicationsResponse, petResponse] = await Promise.all([
+                    fetch(`http://localhost:3000/api/applications/shelter/${listingId}`, {
+                        headers: {
+                            Authorization: `Bearer ${session?.access_token}`,
+                        },
+                    }),
+                    fetch(`http://localhost:3000/api/pets/${listingId}`)
+                ]);
+                const applicationsResult = await applicationsResponse.json();
+                const petResult = await petResponse.json();
+
+                if (!applicationsResponse.ok) {
+                    console.error("Unable to fetch applications:", applicationsResult);
+                } else {
+                    setApplications(applicationsResult.data ?? []);
+                }
+
+                if (!petResponse.ok) {
+                    console.error("Unable to fetch pet:", petResult);
+                } else {
+                    setPet(petResult.pet);
+                }
+            } catch (error) {
+                console.error("Unable to load shelter application dashboard:", error);
+            } finally {
+                setApplicationsLoading(false);
+            }
         }
 
-        fetchApplications();
-    }, []);
+        fetchDashboard();
+    }, [listingId]);
+
+
+    useEffect(() => {
+        async function markSeen() {
+            if (!listingId) return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const response = await fetch(`http://localhost:3000/api/applications/shelter/${listingId}/mark`,
+                    {
+                        method: "PATCH",
+                        headers: {
+                            Authorization: `Bearer ${session?.access_token}`,
+                        },
+                    }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    console.error("Unable to mark applications as seen:", result);
+                }
+            } catch (error) {
+                console.error("Unable to mark applications as seen:", error);
+            }
+        }
+
+        markSeen();
+    }, [listingId]);
+
 
     return (
         <main className="min-h-screen bg-[#F7F6F2] px-6 py-12 text-[#111111]">
@@ -55,21 +121,33 @@ function ShelterApplicationDashboard() {
                 <div className="mx-auto max-w-5xl">
 
                     <button className="mb-5 flex items-center gap-2 rounded-lg bg-[#ACABA4] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#666B52]"
-                     onClick={() => navigate("/jacob/shelter/listings/1") }>
+                     onClick={() => navigate(`/pets/manage`)}>
                         <span className="text-lg leading-none">
                             ←
                         </span>
                         Back
                     </button>
 
-                    <div className="mb-4 flex items-center justify-between">
-                        <h1 className="text-3xl font-semibold">
-                            Applications for ANIMAL NAME
-                        </h1>
+                    <div className="mb-5 flex items-center justify-between rounded-2xl bg-white p-5">
+                        <div className="flex items-center gap-5">
+                            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-stone-200">
+                                {pet?.photos[0] && <img src={pet.photos[0]} alt={pet.pet_name} className="h-full w-full object-cover" />}
+                            </div>
 
-                        <button className="rounded-lg border border-[#757A5E] px-4 py-2 text-[#111111] hover:bg-[#ECEBE4]">
-                            Filter
-                        </button>
+                            <div>
+                                <h1 className="text-3xl font-semibold">
+                                    Applications for {pet?.pet_name ?? "Pet"}
+                                </h1>
+
+                                <p className="mt-1 text-sm text-[#5F6258]">
+                                    {[pet?.species, pet?.breed, pet?.age].filter(Boolean).join(" · ")}
+                                </p>
+
+                                <p className="mt-1 text-sm text-[#5F6258]">
+                                    {pet?.shelter_name}
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
                     <section className="min-h-96 rounded-2xl bg-[#ECEBE4] p-6">
@@ -87,7 +165,14 @@ function ShelterApplicationDashboard() {
                                         className="flex min-h-40 items-stretch gap-6 rounded-2xl border border-[#757A5E] bg-white p-5"
                                     >
                                         <div className="w-32 shrink-0">
-                                            <div className="aspect-square rounded-xl bg-stone-200">
+                                            <div className="aspect-square overflow-hidden rounded-xl bg-stone-200">
+                                                {application.applicant_profile_picture ? (
+                                                    <img src={application.applicant_profile_picture} alt={application.applicant_name} className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <div className="flex h-full w-full items-center justify-center text-3xl font-semibold text-stone-500">
+                                                        {application.applicant_name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 

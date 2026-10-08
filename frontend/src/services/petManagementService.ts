@@ -68,3 +68,38 @@ export async function uploadPetPhoto(file: File, shelterId: string) {
 export async function removePet(id: string) {
     await request(`/pets/${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
 }
+
+export async function getAdoptionQuestions(listingId: string): Promise<string[]> {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const response = await fetch(`http://localhost:3000/api/pets/manage/${listingId}/questions`, {
+        headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+        },
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+        throw new Error(result.message || 'Unable to load adoption questions.');
+    }
+
+    return (result.data ?? []).map((question: { question: string }) => question.question);
+}
+
+export async function saveAdoptionQuestions(listingId: string, questions: string[]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`http://localhost:3000/api/pets/manage/${listingId}/questions`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ questions }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+        throw new Error(result.message || 'Unable to save adoption questions.');
+    }
+    return result.data;
+}

@@ -97,12 +97,14 @@ function ApplicationView() {
             return;
         }
         try {
+            const { data: { session } } = await supabase.auth.getSession();
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/approve`,
                 {
                     method: "PATCH",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
                     },
                     body: JSON.stringify({
                         decisionFeedback: decisionReasoning
@@ -118,7 +120,7 @@ function ApplicationView() {
             alert("Application approved successfully!");
             setIsApproving(false);
             navigate(
-                `/jacob/shelter/listings/${application.listing_id}/applications`
+                `/pets/${application.listing_id}/applications`
             );
 
         } catch (error) {
@@ -126,7 +128,7 @@ function ApplicationView() {
             if (error instanceof Error) {
                 alert(error.message);
                 navigate(
-                    `/jacob/shelter/listings/${application.listing_id}/applications`
+                    `/pets/${application.listing_id}/applications`
                 );
             } else {
                 alert("Unable to approve application.");
@@ -143,12 +145,14 @@ function ApplicationView() {
             return;
         }
         try {
+            const { data: { session } } = await supabase.auth.getSession();
             const response = await fetch(
                 `http://localhost:3000/api/applications/${applicationId}/deny`,
                 {
                     method: "PATCH",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
                     },
                     body: JSON.stringify({
                         decisionFeedback: decisionReasoning
@@ -165,7 +169,7 @@ function ApplicationView() {
             alert("Application denied successfully!");
             setIsDenying(false);
             navigate(
-                `/jacob/shelter/listings/${application.listing_id}/applications`,
+                `/pets/${application.listing_id}/applications`,
                 { replace: true }
             );
 
@@ -176,7 +180,7 @@ function ApplicationView() {
                 alert(error.message);
 
                 navigate(
-                    `/jacob/shelter/listings/${application.listing_id}/applications`
+                    `/pets/${application.listing_id}/applications`
                 );
             } else {
                 alert("Unable to deny application.");
@@ -206,7 +210,7 @@ function ApplicationView() {
             ) :
                 <div className="mx-auto max-w-5xl">
                     <button className="mb-5 flex items-center gap-2 rounded-lg bg-[#ACABA4] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#666B52]"
-                     onClick={() => navigate(`/jacob/shelter/listings/${application?.listing_id}/applications`)}>
+                     onClick={() => navigate(`/pets/${application?.listing_id}/applications`)}>
                         <span className="text-lg leading-none">
                             ←
                         </span>

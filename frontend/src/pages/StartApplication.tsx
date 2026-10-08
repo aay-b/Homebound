@@ -5,6 +5,7 @@ type StartApplicationProps = {
     listingId: string;
     petName: string;
     available: boolean;
+    returnTo: string;
     startApplication: (listingId: string) => Promise<string>;
     onBack: () => void;
 };
@@ -13,6 +14,7 @@ export default function StartApplication({
     listingId,
     petName,
     available,
+    returnTo,
     startApplication,
     onBack,
 }: StartApplicationProps) {
@@ -33,7 +35,9 @@ export default function StartApplication({
             if (!/^[1-9]\d*$/.test(applicationId)) {
                 throw new Error("Unable to open the application. Please try again.");
             }
-            navigate(`/applications/${applicationId}`);
+            navigate(`/applications/${applicationId}`, {
+                state: { returnTo }
+            });
         } catch (error) {
             setError(error instanceof Error ? error.message : "Unable to start the application.");
         } finally {

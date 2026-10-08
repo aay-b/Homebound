@@ -36,8 +36,8 @@ export function App() {
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>
                 <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>
-                <Route path="/jacob/shelter/listings/:listingId/applications" element={<ShelterApplicationDashboard/>}/>
-                <Route path="/jacob/shelter/listings/:listingId/applications/:applicationId" element={<ShelterApplicationView/>}/>
+                <Route path="/pets/:listingId/applications" element={<ShelterApplicationDashboard/>}/>
+                <Route path="/pets/:listingId/applications/:applicationId" element={<ShelterApplicationView/>}/>
 
             </Routes>
         </BrowserRouter>

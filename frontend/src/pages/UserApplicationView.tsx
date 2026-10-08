@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabase";
 
 function ApplicationView() {
@@ -42,6 +42,8 @@ function ApplicationView() {
     const [submitPopup, setSubmitPopup] = useState(false);
 
     const navigate = useNavigate();
+    const location = useLocation();
+    const returnTo = location.state?.returnTo ?? "/applications";
 
     useEffect(() => {
         async function fetchApplication() {
@@ -96,7 +98,7 @@ function ApplicationView() {
         fetchResponses();
     }, [applicationId]);
 
-    const missingResponses = !responses.every((response) => response.response.length > 0);
+    const missingResponses = !responses.every((response) => response.response.trim().length > 0);
 
     function updateResponse(responseId: number, newAnswer: string) {
         setResponses(current =>
@@ -244,7 +246,7 @@ function ApplicationView() {
             ) :
                 <div className="mx-auto max-w-5xl">
                     <button className="mb-5 flex items-center gap-2 rounded-lg bg-[#ACABA4] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#666B52]"
-                     onClick={() => navigate("/applications")}>
+                     onClick={() => navigate(returnTo)}>
                         <span className="text-lg leading-none">
                             ←
                         </span>
@@ -274,6 +276,52 @@ function ApplicationView() {
                             </div>
                         ) : null}
                     </div>
+
+                    {application &&
+                        (application.application_status === "Approved" ||
+                        application.application_status === "Denied") ? (
+
+                        <div
+                            className={`mb-6 rounded-2xl border-2 p-5 ${
+                                application.application_status === "Approved"
+                                    ? "border-green-600 bg-green-50"
+                                    : "border-red-600 bg-red-50"
+                            }`}
+                        >
+                            <div className="flex items-start gap-4">
+                                <div
+                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white ${
+                                        application.application_status === "Approved"
+                                            ? "bg-green-700"
+                                            : "bg-red-700"
+                                    }`}
+                                >
+                                    {application.application_status === "Approved" ? "✓" : "!"}
+                                </div>
+
+                                <div className="min-w-0">
+                                    <h2
+                                        className={`text-xl font-bold ${
+                                            application.application_status === "Approved"
+                                                ? "text-green-900"
+                                                : "text-red-900"
+                                        }`}
+                                    >
+                                        Application {application.application_status}
+                                    </h2>
+
+                                    <p className="mt-3 text-sm font-semibold text-[#5F6258]">
+                                        Decision Feedback
+                                    </p>
+
+                                    <p className="mt-1 whitespace-pre-wrap text-base leading-6 text-[#111111]">
+                                        {application.decision_feedback || "No feedback was provided."}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                    ) : null}
 
                     <section className="min-h-96 rounded-2xl bg-[#ECEBE4] p-6">
 
@@ -353,21 +401,6 @@ function ApplicationView() {
                                 </span>
                             </label>
                         </div>
-                        {application?.application_status === "Approved" || application?.application_status === "Denied" ? (
-                            <div className="mt-16">
-                                <p className="text-center text-sm text-[#5F6258]">
-                                    Shelter staff have given this feedback regarding your application:
-                                </p>
-
-                                <div
-                                    className={`mt-3 w-full rounded-xl border-2 p-4 shadow-sm ${applyFeedbackStyle(
-                                        application.application_status
-                                    )}`}
-                                >
-                                    {application.decision_feedback}
-                                </div>
-                            </div>
-                        ) : null}
                         {application?.application_status === "In Progress" ? (
                             <div className="mt-4 flex items-center justify-between">
                                 <div className="flex flex-col">

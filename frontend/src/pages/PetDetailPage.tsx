@@ -62,6 +62,7 @@ export default function PetDetailPage({ applying = false }: { applying?: boolean
                 available={pet.available}
                 startApplication={startPetApplication}
                 onBack={() => navigate(`/pets/${id}`)}
+                returnTo={`/pets/${id}`}
             />
         );
     }
@@ -71,7 +72,11 @@ export default function PetDetailPage({ applying = false }: { applying?: boolean
             pet={pet}
             loading={loading}
             error={error}
-            onStartApplication={() => navigate(`/pets/${id}/apply`)}
+            onStartApplication={() =>
+                navigate(`/pets/${id}/apply`, {
+                    state: { returnTo: `/pets/${id}` }
+                })
+            }
         />
     );
 }

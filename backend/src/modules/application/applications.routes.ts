@@ -5,6 +5,37 @@ import Application from "./applications.middleware.js";
 
 export const applicationRouter = Router();
 
+
+// Creates a new application for a given pet listing
+applicationRouter.post("/:listingId", requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const listingId = Number(req.params.listingId);
+        const { data, error } = await Application.createApplication(supabase, listingId, userId);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to create application",
+            });
+        }
+
+        return res.json({
+            success: true,
+            data,
+            count: data?.length ?? 0,
+        });
+    } catch (err) {
+        console.error("PUT / error:", err);
+    }
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
+
+
 // Get info for all of a user's applications
 applicationRouter.get("/", requireAuth, async (req, res) => {
     try {
@@ -61,6 +92,41 @@ applicationRouter.get("/shelter/:listingId", async (req, res) => {
         message: "Internal server error",
     });
 });
+
+
+// CURRENTLY LACKING AUTHENTICATION
+// Mark all applications for a specific pet listing as seen
+applicationRouter.patch("/shelter/:listingId/mark", async (req, res) => {
+    try {
+        const listingId = Number(req.params.listingId);
+        if (!listingId) {
+            return res.status(400).json({
+                message: "Invalid listing ID",
+            });
+        }
+        const { data, error } = await Application.markPetApplicationsSeen(supabase, listingId);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to mark applications",
+            });
+        }
+
+        return res.json({
+            success: true,
+            data,
+        });
+    } catch (err) {
+        console.error("GET / error:", err);
+    }
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
+});
+
 
 // CURRENTLY LACKING AUTHENTICATION
 // Get a single application by application ID

@@ -9,6 +9,7 @@ function UserApplicationDashboard() {
         listing_id: number;
         listing: {
             pet_name: string;
+            pet_photo: string | null;
             shelter: {
                 shelter_name: string;
             };
@@ -17,6 +18,8 @@ function UserApplicationDashboard() {
         commitment_question: boolean;
         created_at: string;
         submitted_at: string | null;
+        total_questions: number;
+        answered_questions: number;
     };
 
     const navigate = useNavigate();
@@ -36,6 +39,7 @@ function UserApplicationDashboard() {
             );
 
             const result = await response.json();
+console.error("APPLICATIONS RESPONSE:", result);
             setApplications(result.data);
             setApplicationsLoading(false);
         }
@@ -65,6 +69,29 @@ function UserApplicationDashboard() {
 
             default:
                 return "bg-stone-200 text-stone-800 border-stone-400";
+        }
+    }
+
+    function getProgressMessage(status: string) {
+        switch (status) {
+            case "In Progress":
+                return "Waiting for submission...";
+
+            case "Pending":
+                return "Waiting for staff review...";
+
+            case "Approved":
+            case "Denied":
+                return "A decision has been made. Feedback is now available.";
+
+            case "Passed":
+                return "This pet has been delisted.";
+
+            case "Withdrawn":
+                return "You chose to withdraw this application.";
+
+            default:
+                return "";
         }
     }
 
@@ -140,7 +167,6 @@ function UserApplicationDashboard() {
                         </span>
                         Back
                     </button>
-
                     <div className="mb-4 flex items-center justify-between">
                         <h1 className="text-3xl font-semibold">
                             My Applications
@@ -165,29 +191,69 @@ function UserApplicationDashboard() {
                                         key={application.id}
                                         className="flex items-center gap-6 rounded-2xl border border-[#757A5E] bg-white p-5"
                                     >
-                                        <div className="w-32 shrink-0">
-                                            <div className="aspect-square rounded-xl bg-stone-200">
-                                            </div>
+                                        <div className="h-32 w-32 shrink-0 overflow-hidden rounded-xl bg-stone-200">
+                                            {application.listing.pet_photo ? (
+                                                <img
+                                                    src={application.listing.pet_photo}
+                                                    alt={application.listing.pet_name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full w-full items-center justify-center text-sm text-stone-500">
+                                                    No photo
+                                                </div>
+                                            )}
                                         </div>
 
-                                        <div className="flex flex-1 flex-col">
-                                            <h2 className="text-xl font-semibold text-[#111111]">
+                                        <div className="flex min-w-0 flex-1 flex-col justify-center -mr-12">
+                                            <h2 className="truncate text-2xl font-bold leading-tight text-[#111111]">
                                                 {application.listing.pet_name}
                                             </h2>
 
-                                            <p className="text-sm text-[#5F6258]">
+                                            <p className="mt-1 break-words text-base font-medium leading-snug text-[#5F6258]">
                                                 {application.listing.shelter.shelter_name}
                                             </p>
 
                                             <button
-                                                className="mt-auto w-fit rounded-lg border border-[#757A5E] px-4 py-2 text-sm font-medium text-[#111111] hover:bg-[#F1F1EC]"
-                                                onClick={() => navigate("/NOTIMPLEMENTED")}
+                                                className="mt-4 w-fit rounded-lg border border-[#757A5E] px-4 py-2 text-sm font-medium text-[#111111] hover:bg-[#F1F1EC]"
+                                                onClick={() => navigate(`/pets/${application.listing_id}`)}
                                             >
-                                                View Pet Listing
+                                                To Pet Listing
                                             </button>
+                                        </div>`
+
+                                        <div className="flex w-52 shrink-0 flex-col justify-center border-l border-[#D6D8D0] px-6">
+                                            <p className="text-sm font-medium text-[#5F6258]">
+                                                Application Progress
+                                            </p>
+
+                                            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#E2E3DC]">
+                                                <div
+                                                    className="h-full rounded-full bg-[#667052]"
+                                                    style={{
+                                                        width: `${
+                                                            application.total_questions === 0
+                                                                ? 0
+                                                                : (application.answered_questions /
+                                                                    application.total_questions) * 100
+                                                        }%`
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <p className="mt-2 text-sm text-[#5F6258]">
+                                                <span className="font-semibold text-[#111111]">
+                                                    {application.answered_questions} / {application.total_questions}
+                                                </span>{" "}
+                                                questions answered
+                                            </p>
+
+                                            <p className="mt-3 h-12 text-xs italic leading-4 text-[#777777]">
+                                                {getProgressMessage(application.application_status)}
+                                            </p>
                                         </div>
 
-                                        <div className="flex w-36 shrink-0 flex-col items-center justify-center">
+                                        <div className="flex w-44 shrink-0 flex-col items-center justify-center border-l border-[#D6D8D0] pl-6">
                                             <span
                                                 className={`w-full rounded-full border px-4 py-2 text-center text-sm font-medium capitalize ${applyStatusColor(
                                                     application.application_status
@@ -199,8 +265,12 @@ function UserApplicationDashboard() {
                                             <p className="mt-2 text-center text-xs text-[#5F6258]">
                                                 <span className="block">
                                                     {application.submitted_at
-                                                        ? `Submitted ${new Date(application.submitted_at).toLocaleDateString()}`
-                                                        : `Started ${new Date(application.created_at).toLocaleDateString()}`}
+                                                        ? `Submitted ${new Date(
+                                                            application.submitted_at
+                                                        ).toLocaleDateString()}`
+                                                        : `Started ${new Date(
+                                                            application.created_at
+                                                        ).toLocaleDateString()}`}
                                                 </span>
 
                                                 <span className="block">
@@ -213,7 +283,7 @@ function UserApplicationDashboard() {
                                                 </span>
                                             </p>
 
-                                            <div className="mt-6 flex h-5 items-center justify-center">
+                                            <div className="mt-4 flex h-5 items-center justify-center">
                                                 {application.application_status === "Pending" ? (
                                                     <button
                                                         className="text-xs text-[#777777] hover:text-[#444444] hover:underline"

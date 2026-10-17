@@ -1,0 +1,15 @@
+/// An active, directional block: blocker stops communication with blocked.
+/// Unblocking removes this row; opposite-direction blocks remain independent.
+model UserBlock {
+  blockerId BigInt   @map("blocker_id")
+  blockedId BigInt   @map("blocked_id")
+  blockedAt DateTime @default(now()) @map("blocked_at") @db.Timestamptz(6)
+  blocker   User     @relation("UserBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("UserBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  // The SQL migration also prevents users from blocking themselves.
+  @@id([blockerId, blockedId])
+  @@index([blockerId, blockedAt(sort: Desc)], map: "user_blocks_blocker_blocked_at_index")
+  @@index([blockedId], map: "user_blocks_blocked_id_index")
+  @@map("UserBlocks")
+}

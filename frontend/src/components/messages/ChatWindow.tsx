@@ -62,7 +62,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }, [currentUserId, conversation?.id])
 
   if (!conversation) {
-    return <section className="h-[calc(100vh-9rem)] min-h-[640px] max-h-[760px] flex-1 bg-[#fffdf9]" />
+    return <section className="min-h-0 min-w-0 flex-1 bg-[#fffdf9]" />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -144,8 +144,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }
 
   return (
-    <section className="flex h-[calc(100vh-9rem)] min-h-[640px] max-h-[760px] flex-1 flex-col bg-[#fffdf9]">
-      <header className="border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#fffdf9]">
+      <header className="shrink-0 border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-full bg-[#FABF6B]/40 text-sm font-bold text-[#344336]">{conversation.participantInitials}</div>
@@ -164,7 +164,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
       </header>
 
-      <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto px-5 pb-6 pt-10 sm:px-7">
+      <div ref={messagesContainerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 pb-6 pt-10 sm:px-7">
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
           const isEditing = editingMessageId === message.id
@@ -224,11 +224,11 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       </div>
 
       {isParticipantBlocked ? (
-        <div className="border-t border-[#757A5E]/15 bg-[#f7f3eb] px-5 py-6 text-center text-sm font-medium text-slate-600" role="status">
+        <div className="shrink-0 border-t border-[#757A5E]/15 bg-[#f7f3eb] px-5 py-6 text-center text-sm font-medium text-slate-600" role="status">
           You cannot send messages to this person.
         </div>
       ) : (
-      <form onSubmit={handleSubmit} className="border-t border-[#757A5E]/15 bg-white p-4 sm:px-7 sm:py-5">
+      <form onSubmit={handleSubmit} className="shrink-0 border-t border-[#757A5E]/15 bg-white p-4 sm:px-7 sm:py-5">
         <div className="flex items-end gap-3">
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} readOnly={isSending} rows={1} className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-[#757A5E]/25 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#757A5E] focus:ring-4 focus:ring-[#FABF6B]/20" placeholder="Write a message..." />
           <button type="submit" disabled={isSending} className="h-11 rounded-xl bg-[#757A5E] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#344336] disabled:cursor-not-allowed disabled:bg-[#757A5E]/60">{isSending ? 'Sending...' : 'Send'}</button>

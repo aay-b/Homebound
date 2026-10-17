@@ -56,7 +56,14 @@ function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageReque
 }
 
 function formatMessageTime(createdAt: string) {
-  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(createdAt))
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(createdAt))
 }
 
 function toMessage(storedMessage: StoredMessage): Message {
@@ -633,7 +640,7 @@ export function MessagesPage() {
 
   if (isAuthLoading || !currentUserId) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f7f3eb] px-4 text-[#344336]">
+      <main className="grid h-dvh place-items-center bg-[#f7f3eb] px-4 text-[#344336]">
         <p className="rounded-xl bg-white px-5 py-4 shadow-sm">
           {messagingUserError ?? 'Loading your messaging account...'}
         </p>
@@ -642,8 +649,8 @@ export function MessagesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900">
-      <nav className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 px-6 py-4 backdrop-blur md:px-10">
+    <main className="flex h-dvh flex-col overflow-hidden bg-stone-50 text-stone-900">
+      <nav className="relative z-50 shrink-0 border-b border-stone-200 bg-white/95 px-6 py-4 backdrop-blur md:px-10">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link to="/" className="text-xl font-bold tracking-[0.15em]">
             HOMEBOUND
@@ -658,8 +665,8 @@ export function MessagesPage() {
           </div>
         </div>
       </nav>
-      <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
-        <div className="overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-8 lg:px-12 lg:py-6">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex-row">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
         </div>

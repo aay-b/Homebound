@@ -10,6 +10,8 @@ model User {
   conversationMemberships  ConversationMember[]
   sentMessages             Message[]
   reactions                MessageReaction[]
+  blocksInitiated          UserBlock[]          @relation("UserBlockBlocker")
+  blocksReceived           UserBlock[]          @relation("UserBlockBlocked")
 
   @@map("Users")
 }

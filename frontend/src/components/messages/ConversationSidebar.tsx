@@ -163,7 +163,7 @@ export function ConversationSidebar({
   }
 
   return (
-    <aside className="w-full border-b border-[#757A5E]/20 bg-[#fffdf9] lg:w-[320px] lg:border-b-0 lg:border-r">
+    <aside className="max-h-[40%] min-h-0 w-full shrink-0 overflow-y-auto overscroll-contain border-b border-[#757A5E]/20 bg-[#fffdf9] lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r">
       <div className="border-b border-[#757A5E]/15 px-5 py-4">
         <label className="flex items-center gap-2 rounded-xl border border-[#757A5E]/25 bg-[#f7f3eb] px-3 py-2.5 focus-within:border-[#757A5E] focus-within:bg-white">
           <span aria-hidden="true">⌕</span>

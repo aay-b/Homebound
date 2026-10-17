@@ -10,6 +10,7 @@ import PetDetailPage from '@/pages/PetDetailPage'
 import Pets from '@/pages/Pets'
 import PetForm from '@/pages/PetForm'
 import ManagePets from '@/pages/ManagePets'
+import Favorites from '@/pages/Favorites'
 
 import UserApplicationDashboard from "./pages/UserApplicationDashboard";
 import UserApplicationView from "./pages/UserApplicationView";
@@ -33,6 +34,7 @@ export function App() {
                 <Route path="/pets/new" element={<ProtectedRoute><PetForm /></ProtectedRoute>} />
                 <Route path="/pets/:id/edit" element={<ProtectedRoute><PetForm /></ProtectedRoute>} />
                 <Route path="/pets/:id/apply" element={<PetDetailPage applying />} />
+                <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
 
                 <Route path="/applications" element={<UserApplicationDashboard/>}/>
                 <Route path="/applications/:applicationId" element={<UserApplicationView/>}/>

@@ -125,5 +125,69 @@ export function createFavoritesRouter(supabase: SupabaseClient) {
         }
     });
 
+    router.get("/", requireAuth, async (req, res) => {
+        try {
+            const { data: favorites, error } = await supabase
+                .from("Favorites")
+                .select(`id, listing_id, created_at, Listings (id, pet_name, species, breed, age, photo_paths, available, shelter:Shelters(shelter_name))`)
+                .eq("user_id", req.user.id)
+                .order("created_at", { ascending: false });
+
+            if (error) throw error;
+
+            const result = await Promise.all(
+                (favorites ?? []).map(async (favorite) => {
+                    const listing = Array.isArray(favorite.Listings)
+                        ? favorite.Listings[0]
+                        : favorite.Listings;
+
+                    if (!listing) {
+                        return {...favorite, Listings: null};
+                    }
+
+                    let photos: string[] = [];
+
+                    if (listing.photo_paths?.length) {
+                        const { data: signed, error: photoError } =
+                            await supabase.storage
+                                .from("pet-photos")
+                                .createSignedUrls(
+                                    listing.photo_paths.slice(0, 1),
+                                    3600
+                                );
+
+                        if (photoError) throw photoError;
+
+                        photos = (signed ?? [])
+                            .map((photo) => photo.signedUrl)
+                            .filter(
+                                (url): url is string =>
+                                    Boolean(url)
+                            );
+                    }
+
+                    return {...favorite,
+                        Listings: {id: String(listing.id), pet_name: listing.pet_name, species: listing.species, breed: listing.breed, age: listing.age, photos,
+                            shelter_name:
+                                (listing.shelter as unknown as {
+                                    shelter_name: string;
+                                })?.shelter_name || "Shelter",
+                            available: listing.available,
+                        },
+                    };
+                })
+            );
+
+            return res.status(200).json({
+                favorites: result,
+            });
+        } catch (error) {
+            console.error("Unable to get favorites:", error);
+            return res.status(500).json({
+                message: "Unable to load favorites.",
+            });
+        }
+    });
+
     return router;
 }

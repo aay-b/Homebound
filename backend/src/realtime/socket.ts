@@ -2,6 +2,8 @@ import type { Server as HttpServer } from 'node:http'
 import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
+import { supabase } from '@/config/supabase.js'
+import { blockedMessagingError, blockUser, type UserBlockEvent } from '@/modules/messages/blocking.service.js'
 import { deleteConversation, type ConversationDeletion } from '@/modules/messages/conversations.service.js'
 import type { MessageRequestParticipant } from '@/modules/messages/message-requests.service.js'
 import { createMessage, deleteMessage, editMessage, toggleMessageReaction, type MessageDeletion, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
@@ -12,6 +14,7 @@ type ToggleReactionAcknowledgement = (response: { ok: boolean; error?: string; u
 type EditMessageAcknowledgement = (response: { ok: boolean; error?: string; update?: MessageUpdate }) => void
 type DeleteMessageAcknowledgement = (response: { ok: boolean; error?: string; deletion?: MessageDeletion }) => void
 type DeleteConversationAcknowledgement = (response: { ok: boolean; error?: string; deletion?: ConversationDeletion }) => void
+type BlockUserAcknowledgement = (response: { ok: boolean; error?: string; block?: UserBlockEvent }) => void
 
 type SendMessagePayload = {
   conversationId: unknown
@@ -149,20 +152,53 @@ export function createSocketServer(httpServer: HttpServer) {
   messagingSocketServer = io
 
   io.use(async (socket, next) => {
-    // Authentication is temporary: the URL-selected demo user is passed during the handshake.
-    const userId = toDatabaseId(socket.handshake.auth.userId)
-    if (!userId) return next(new Error('A valid user ID is required.'))
+    try {
+      const userId = toDatabaseId(socket.handshake.auth.userId)
+      if (!userId) return next(new Error('A valid user ID is required.'))
+      const accessToken = socket.handshake.auth.accessToken
+      if (typeof accessToken !== 'string') return next(new Error('Authentication required.'))
+      const { data, error } = await supabase.auth.getUser(accessToken)
+      if (error || !data.user) return next(new Error('Invalid or expired session.'))
+      const name = data.user.user_metadata.name
+      if (typeof name !== 'string' || !name.trim()) return next(new Error('The account has no display name.'))
+      // Match /users/me: the numeric messaging identity must belong to the authenticated account.
+      const user = await prisma.user.findFirst({ where: { name }, select: { id: true } })
+      if (!user || user.id !== userId) return next(new Error('Messaging account does not match the authenticated user.'))
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
-    if (!user) return next(new Error('User was not found.'))
-
-    socket.data.userId = userId
-    next()
+      socket.data.userId = userId
+      next()
+    } catch {
+      next(new Error('Unable to authenticate the messaging account.'))
+    }
   })
 
   io.on('connection', (socket) => {
     const userId = socket.data.userId as bigint
     socket.join(userRoom(userId))
+
+    socket.on('block_user', async (payload: unknown, acknowledge?: BlockUserAcknowledgement) => {
+      try {
+        const participantId = payload && typeof payload === 'object' && 'participantId' in payload
+          ? toDatabaseId(payload.participantId) : null
+        if (!participantId) {
+          acknowledge?.({ ok: false, error: 'A valid participant ID is required.' })
+          return
+        }
+        const result = await blockUser(userId, participantId)
+        if (result.status === 'self_block') {
+          acknowledge?.({ ok: false, error: 'You cannot block yourself.' })
+          return
+        }
+        if (result.status === 'not_found') {
+          acknowledge?.({ ok: false, error: 'User was not found.' })
+          return
+        }
+        io.to([userRoom(userId), userRoom(participantId)]).emit('user_blocked', result.block)
+        acknowledge?.({ ok: true, block: result.block })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to block this user. Please try again.' })
+      }
+    })
 
     socket.on('join_conversation', async (conversationIdValue: unknown, acknowledge: JoinConversationAcknowledgement) => {
       try {
@@ -212,6 +248,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
         if (result.status === 'not_a_member') {
           acknowledge?.({ ok: false, error: 'User is not a conversation member.' })
+          return
+        }
+
+        if (result.status === 'blocked') {
+          acknowledge?.({ ok: false, error: blockedMessagingError })
           return
         }
 

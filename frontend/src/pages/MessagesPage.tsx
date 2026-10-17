@@ -25,6 +25,7 @@ function toConversation(preview: ConversationPreview): Conversation {
   return {
     id: preview.id,
     participantId: preview.participant.id,
+    isBlocked: preview.isBlocked ?? false,
     participantName: preview.participant.name,
     participantInitials: getInitials(preview.participant.name),
     participantRole: preview.participant.role === 'shelter_staff' ? 'shelterStaff' : 'user',
@@ -56,13 +57,13 @@ function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageReque
 }
 
 function formatMessageTime(createdAt: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat('en-US', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hour12: true,
   }).format(new Date(createdAt))
 }
 
@@ -157,6 +158,8 @@ type MessageRequestResolvedEvent = {
 type MessageRequestCancelledEvent = {
   requestId: string
 }
+
+type UserBlockEvent = { blockerId: string; blockedId: string }
 
 type AppliedReactionChange = {
   emoji: string
@@ -268,6 +271,8 @@ export function MessagesPage() {
   const [resolvedOutgoingRequest, setResolvedOutgoingRequest] = useState<{ requestId: string; recipientId: string } | null>(null)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
+  const blockedParticipantIdsRef = useRef(new Set<string>())
+  const activeConversationIdRef = useRef<string | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const currentUserId = messagingUser?.id
 
@@ -299,6 +304,23 @@ export function MessagesPage() {
     // Reconnect whenever the authenticated messaging account changes.
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
+    blockedParticipantIdsRef.current = new Set()
+
+    const handleUserBlocked = (block: UserBlockEvent) => applyUserBlock(block)
+    let isCurrentConnection = true
+    const handleConnect = () => {
+      // Rejoin after a network interruption and recover blocks missed while offline.
+      const selectedId = activeConversationIdRef.current
+      if (selectedId) socket.emit('join_conversation', selectedId, () => {})
+      getConversations(currentUserId).then((previews) => {
+        if (!isCurrentConnection) return
+        previews.filter((preview) => preview.isBlocked).forEach((preview) => blockedParticipantIdsRef.current.add(preview.participant.id))
+        setConversations((current) => current.map((conversation) => ({
+          ...conversation,
+          isBlocked: conversation.isBlocked || blockedParticipantIdsRef.current.has(conversation.participantId),
+        })))
+      }).catch((error: unknown) => console.error('Unable to refresh conversation block status.', error))
+    }
 
     const handleMessageCreated = (storedMessage: StoredMessage) => {
       // Use the database ID to ignore a duplicate received through the event acknowledgement.
@@ -358,6 +380,7 @@ export function MessagesPage() {
 
       const conversation = toConversationFromParticipants(resolution.conversation, currentUserId)
       if (!conversation) return
+      conversation.isBlocked = blockedParticipantIdsRef.current.has(conversation.participantId)
 
       setConversations((currentConversations) => (
         currentConversations.some((currentConversation) => currentConversation.id === conversation.id)
@@ -381,8 +404,11 @@ export function MessagesPage() {
     socket.on('message_request_resolved', handleMessageRequestResolved)
     socket.on('message_request_cancelled', handleMessageRequestCancelled)
     socket.on('message_reaction_updated', handleReactionUpdated)
+    socket.on('user_blocked', handleUserBlocked)
+    socket.on('connect', handleConnect)
 
     return () => {
+      isCurrentConnection = false
       socket.off('message_created', handleMessageCreated)
       socket.off('message_updated', handleMessageUpdated)
       socket.off('message_deleted', handleMessageDeleted)
@@ -391,12 +417,15 @@ export function MessagesPage() {
       socket.off('message_request_resolved', handleMessageRequestResolved)
       socket.off('message_request_cancelled', handleMessageRequestCancelled)
       socket.off('message_reaction_updated', handleReactionUpdated)
+      socket.off('user_blocked', handleUserBlocked)
+      socket.off('connect', handleConnect)
       socket.disconnect()
       socketRef.current = null
     }
   }, [currentUserId])
 
   useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
     if (!activeConversationId || !currentUserId) return
 
     // Join only the selected thread so later real-time events can be scoped to its members.
@@ -454,7 +483,10 @@ export function MessagesPage() {
         if (!isCurrentAccount) return
         setMessageRequests(requests.map(toMessageRequest))
         setOutgoingMessageRequests(outgoingRequests.map(toOutgoingMessageRequest))
-        setConversations(loadedConversations.map(toConversation))
+        setConversations(loadedConversations.map((preview) => ({
+          ...toConversation(preview),
+          isBlocked: Boolean(preview.isBlocked) || blockedParticipantIdsRef.current.has(preview.participant.id),
+        })))
       })
       .catch((error: unknown) => {
         if (isCurrentAccount) console.error('Unable to load messaging data.', error)
@@ -466,7 +498,35 @@ export function MessagesPage() {
     }
   }, [currentUserId])
 
+  function applyUserBlock(block: UserBlockEvent) {
+    if (block.blockerId !== currentUserId && block.blockedId !== currentUserId) return
+    const participantId = block.blockerId === currentUserId ? block.blockedId : block.blockerId
+    blockedParticipantIdsRef.current.add(participantId)
+    setConversations((current) => current.map((conversation) => conversation.participantId === participantId
+      ? { ...conversation, isBlocked: true } : conversation))
+  }
+
+  function blockParticipant(participantId: string) {
+    const socket = socketRef.current
+    if (!socket?.connected) return Promise.resolve({ ok: false, error: getConnectionError() })
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.timeout(5000).emit('block_user', { participantId }, (timeoutError: Error | null, response?: { ok: boolean; error?: string; block?: UserBlockEvent }) => {
+        if (timeoutError) {
+          resolve({ ok: false, error: getConnectionError() })
+          return
+        }
+        if (!response?.ok || !response.block) {
+          resolve({ ok: false, error: response?.error ?? 'Unable to block this user. Please try again.' })
+          return
+        }
+        applyUserBlock(response.block)
+        resolve({ ok: true })
+      })
+    })
+  }
+
   function sendMessage(content: string) {
+    if (activeConversation?.isBlocked) return Promise.resolve({ ok: false, error: 'You cannot send messages to this person.' })
     const socket = socketRef.current
     if (!activeConversationId || !socket || !socket.connected) {
       return Promise.resolve({ ok: false, error: getConnectionError() })
@@ -609,6 +669,7 @@ export function MessagesPage() {
 
       if (result.status === 'accepted' && result.conversation) {
         const conversation = toConversation(result.conversation)
+        conversation.isBlocked = conversation.isBlocked || blockedParticipantIdsRef.current.has(conversation.participantId)
         setConversations((currentConversations) => (
           currentConversations.some((currentConversation) => currentConversation.id === conversation.id)
             ? currentConversations
@@ -668,7 +729,7 @@ export function MessagesPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-8 lg:px-12 lg:py-6">
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex-row">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
-          <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} />
+          <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} />
         </div>
       </div>
     </main>

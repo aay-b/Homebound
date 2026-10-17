@@ -1,4 +1,5 @@
 import { prisma } from '@/config/prisma.js'
+import { hasBlockBetween, lockMessagingPair } from '@/modules/messages/blocking.service.js'
 
 export type StoredMessage = {
   id: string
@@ -50,6 +51,7 @@ type CreateMessageResult =
   | { status: 'empty_content' }
   | { status: 'conversation_not_found' }
   | { status: 'not_a_member' }
+  | { status: 'blocked' }
   | { status: 'created'; message: StoredMessage }
 
 type ConversationMessagesResult =
@@ -118,40 +120,46 @@ export async function createMessage(
   const normalizedContent = content.trim()
   if (!normalizedContent) return { status: 'empty_content' }
 
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true },
-  })
-  if (!conversation) return { status: 'conversation_not_found' }
+  return prisma.$transaction(async (transaction) => {
+    const conversation = await transaction.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, members: { select: { userId: true } } },
+    })
+    if (!conversation) return { status: 'conversation_not_found' }
 
-  // A sender may write only to a conversation they belong to.
-  const membership = await prisma.conversationMember.findUnique({
-    where: { conversationId_userId: { conversationId, userId: senderId } },
-    select: { conversationId: true },
-  })
-  if (!membership) return { status: 'not_a_member' }
+    // A sender may write only to a conversation they belong to.
+    if (!conversation.members.some((member) => member.userId === senderId)) return { status: 'not_a_member' }
 
-  // Store normalized content so persisted messages never contain whitespace-only values.
-  const message = await prisma.message.create({
-    data: {
-      conversationId,
-      senderId,
-      content: normalizedContent,
-    },
-    select: {
-      id: true,
-      conversationId: true,
-      senderId: true,
-      content: true,
-      createdAt: true,
-      editedAt: true,
-    },
-  })
+    const otherMembers = conversation.members
+      .filter((member) => member.userId !== senderId)
+      .sort((a, b) => a.userId < b.userId ? -1 : 1)
+    for (const member of otherMembers) {
+      await lockMessagingPair(transaction, senderId, member.userId)
+      if (await hasBlockBetween(senderId, member.userId, transaction)) return { status: 'blocked' }
+    }
 
-  return {
-    status: 'created',
-    message: toStoredMessage(message),
-  }
+    // Store normalized content so persisted messages never contain whitespace-only values.
+    const message = await transaction.message.create({
+      data: {
+        conversationId,
+        senderId,
+        content: normalizedContent,
+      },
+      select: {
+        id: true,
+        conversationId: true,
+        senderId: true,
+        content: true,
+        createdAt: true,
+        editedAt: true,
+      },
+    })
+
+    return {
+      status: 'created',
+      message: toStoredMessage(message),
+    }
+  })
 }
 
 export async function editMessage(

@@ -6,6 +6,7 @@ type ConversationsResult =
       status: 'success'
       conversations: Array<{
         id: string
+        isBlocked: boolean
         participant: { id: string; name: string; role: 'user' | 'shelter_staff' }
       }>
     }
@@ -38,6 +39,12 @@ export async function getConversations(currentUserId: bigint): Promise<Conversat
     },
   })
 
+  const blocks = await prisma.userBlock.findMany({
+    where: { OR: [{ blockerId: currentUserId }, { blockedId: currentUserId }] },
+    select: { blockerId: true, blockedId: true },
+  })
+  const blockedParticipantIds = new Set(blocks.map((block) => block.blockerId === currentUserId ? block.blockedId : block.blockerId))
+
   return {
     status: 'success',
     conversations: conversations.flatMap((conversation) => {
@@ -47,6 +54,7 @@ export async function getConversations(currentUserId: bigint): Promise<Conversat
 
       return [{
         id: conversation.id.toString(),
+        isBlocked: blockedParticipantIds.has(participant.id),
         participant: {
           id: participant.id.toString(),
           name: participant.name,

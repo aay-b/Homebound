@@ -19,8 +19,7 @@ type ChatWindowProps = {
   onEditMessage: (messageId: string, content: string) => Promise<EditMessageResult>
   onDeleteMessage: (messageId: string) => void
   onToggleReaction: (messageId: string, emoji: string) => void
-  // The parent will connect this callback to the block API when it is available.
-  onBlockParticipant?: (participantId: string) => Promise<SendMessageResult>
+  onBlockParticipant: (participantId: string) => Promise<SendMessageResult>
 }
 
 // These are the six reaction options available in the current messaging UI.
@@ -41,10 +40,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false)
   const [isBlockingParticipant, setIsBlockingParticipant] = useState(false)
   const [blockError, setBlockError] = useState('')
-  // Temporary frontend state, scoped to the signed-in user and participant until the block API is connected.
-  const [blockedParticipants, setBlockedParticipants] = useState<Set<string>>(() => new Set())
-  const participantKey = conversation ? `${currentUserId}:${conversation.participantId}` : ''
-  const isParticipantBlocked = blockedParticipants.has(participantKey)
+  const isParticipantBlocked = conversation?.isBlocked ?? false
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const isSendingRef = useRef(false)
   const isEditingRef = useRef(false)
@@ -60,6 +56,14 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
     setIsBlockDialogOpen(false)
     setBlockError('')
   }, [currentUserId, conversation?.id])
+
+  useEffect(() => {
+    if (!isParticipantBlocked) return
+    setDraft('')
+    setSendError('')
+    setIsActionsMenuOpen(false)
+    setIsBlockDialogOpen(false)
+  }, [isParticipantBlocked])
 
   if (!conversation) {
     return <section className="min-h-0 min-w-0 flex-1 bg-[#fffdf9]" />
@@ -127,9 +131,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
     setBlockError('')
 
     try {
-      const result = onBlockParticipant ? await onBlockParticipant(conversation.participantId) : { ok: true }
+      const result = await onBlockParticipant(conversation.participantId)
       if (result.ok) {
-        setBlockedParticipants((current) => new Set([...current, participantKey]))
         setDraft('')
         setSendError('')
         setIsBlockDialogOpen(false)

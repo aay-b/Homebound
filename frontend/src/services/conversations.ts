@@ -1,5 +1,6 @@
 export type ConversationPreview = {
   id: string
+  isBlocked?: boolean
   participant: { id: string; name: string; role: 'user' | 'shelter_staff' }
 }
 

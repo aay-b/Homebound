@@ -20,6 +20,7 @@ export type Message = {
 export type Conversation = {
   id: string
   participantId: string
+  isBlocked: boolean
   participantName: string
   participantInitials: string
   participantRole: UserRole

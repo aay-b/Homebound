@@ -24,6 +24,7 @@ function getInitials(name: string) {
 function toConversation(preview: ConversationPreview): Conversation {
   return {
     id: preview.id,
+    participantId: preview.participant.id,
     participantName: preview.participant.name,
     participantInitials: getInitials(preview.participant.name),
     participantRole: preview.participant.role === 'shelter_staff' ? 'shelterStaff' : 'user',

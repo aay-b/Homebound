@@ -19,6 +19,7 @@ export type Message = {
 
 export type Conversation = {
   id: string
+  participantId: string
   participantName: string
   participantInitials: string
   participantRole: UserRole

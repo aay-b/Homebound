@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
+import { supabase } from "../config/supabase";
+import { useEffect, useState } from "react";
 
 export type PetDetails = {
+    id: number;
     pet_name: string;
     species: string;
     breed: string;
@@ -27,6 +30,43 @@ export default function PetDetail({
     onStartApplication,
 }: PetDetailProps) {
     const photos = pet?.photos.filter(Boolean) ?? [];
+    const [isFavorite, setIsFavorite] = useState(false);
+    const [favoriteLoading, setFavoriteLoading] = useState(false);
+    const [favoriteStatusLoading, setFavoriteStatusLoading] = useState(true);
+    useEffect(() => {
+        if (!pet) return;
+
+        const checkFavorite = async () => {
+            setFavoriteStatusLoading(true);
+            try {
+                const { data } = await supabase.auth.getSession();
+                const accessToken = data.session?.access_token;
+
+                if (!accessToken) return;
+
+                const response = await fetch(
+                    `http://localhost:3000/api/favorites/${pet.id}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                        },
+                    }
+                );
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    setIsFavorite(result.isFavorite);
+                }
+            } catch {
+                return;
+            } finally {
+            setFavoriteStatusLoading(false);
+            }
+        };
+
+        checkFavorite();
+    }, [pet]);
 
     return (
         <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900">
@@ -85,6 +125,55 @@ export default function PetDetail({
                             </div>
 
                             {pet.available ? (
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        disabled={favoriteLoading || favoriteStatusLoading}
+                                        onClick={async () => {
+                                            setFavoriteLoading(true);
+
+                                            try {
+                                                const { data } = await supabase.auth.getSession();
+                                                const accessToken = data.session?.access_token;
+
+                                                if (!accessToken) {
+                                                    alert("Please log in to add favorites.");
+                                                    return;
+                                                }
+
+                                                const response = await fetch(
+                                                    `http://localhost:3000/api/favorites/${pet.id}`,
+                                                    {
+                                                        method: isFavorite ? "DELETE" : "POST",
+                                                        headers: {
+                                                            Authorization: `Bearer ${accessToken}`,
+                                                        },
+                                                    });
+
+                                                const result = await response.json();
+
+                                                if (!response.ok) {
+                                                    alert(result.message || "Unable to add favorite.");
+                                                    return;
+                                                }
+
+                                                setIsFavorite((current) => !current);
+                                            } catch {
+                                                alert("Unable to add favorite.");
+                                            } finally {
+                                                setFavoriteLoading(false);
+                                            }
+                                        }}
+                                        className="flex cursor-pointer items-center gap-2 rounded-full border border-stone-300 px-5 py-3 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        aria-label={isFavorite ? `Remove ${pet.pet_name} from favorites` : `Add ${pet.pet_name} to favorites`}
+                                    >
+                                        <span className={isFavorite ? "text-red-500" : "text-stone-700"}>
+                                            {favoriteStatusLoading ? "♡" : isFavorite ? "♥" : "♡"}
+                                        </span>
+                                        <span className="text-sm font-medium text-stone-700">
+                                            {favoriteStatusLoading ? "Checking favorites..." : isFavorite ? "Remove from favorites" : "Add to favorites"}
+                                        </span>
+                                    </button>
                                 <>
                                     <button
                                         type="button"
@@ -100,6 +189,7 @@ export default function PetDetail({
                                         </p>
                                     )}
                                 </>
+                            </div>
                             ) : (
                                 <p className="rounded-xl bg-amber-50 p-4 text-amber-900">
                                     This pet is no longer available for adoption.

@@ -13,6 +13,7 @@ import { usersRouter } from '@/modules/users/users.router.js'
 import { createPetRouter } from '@/modules/pets/pet.routes.js'
 import { createPetManagementRouter } from '@/modules/pets/pet.management.js'
 import { requireAuth } from '@/modules/auth/auth.middleware.js'
+import { createFavoritesRouter } from '@/modules/favorites/favorites.routes.js'
 
 export const app = express()
 
@@ -30,3 +31,4 @@ app.use('/api/message-requests', messageRequestsRouter)
 app.use('/api/conversations', conversationsRouter)
 app.use('/api/conversations', messagesRouter)
 app.use('/api/profile', profileRouter)
+app.use('/api/favorites', createFavoritesRouter(supabase))

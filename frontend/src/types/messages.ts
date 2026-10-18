@@ -1,5 +1,12 @@
 export type UserRole = 'user' | 'shelterStaff'
 
+export type BlockedUser = {
+  id: string
+  name: string
+  role: string
+  blockedAt: string
+}
+
 export type MessageReaction = {
   emoji: string
   count: number

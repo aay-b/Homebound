@@ -3,7 +3,7 @@ import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
 import { supabase } from '@/config/supabase.js'
-import { blockedMessagingError, blockUser, type UserBlockEvent } from '@/modules/messages/blocking.service.js'
+import { blockedMessagingError, blockUser, getBlockedUsers, unblockUser, type BlockedUser, type UserBlockEvent, type UserUnblockEvent } from '@/modules/messages/blocking.service.js'
 import { deleteConversation, type ConversationDeletion } from '@/modules/messages/conversations.service.js'
 import type { MessageRequestParticipant } from '@/modules/messages/message-requests.service.js'
 import { createMessage, deleteMessage, editMessage, toggleMessageReaction, type MessageDeletion, type MessageReactionUpdate, type MessageUpdate, type StoredMessage } from '@/modules/messages/messages.service.js'
@@ -15,6 +15,8 @@ type EditMessageAcknowledgement = (response: { ok: boolean; error?: string; upda
 type DeleteMessageAcknowledgement = (response: { ok: boolean; error?: string; deletion?: MessageDeletion }) => void
 type DeleteConversationAcknowledgement = (response: { ok: boolean; error?: string; deletion?: ConversationDeletion }) => void
 type BlockUserAcknowledgement = (response: { ok: boolean; error?: string; block?: UserBlockEvent }) => void
+type BlockedUsersAcknowledgement = (response: { ok: boolean; error?: string; users?: BlockedUser[] }) => void
+type UnblockUserAcknowledgement = (response: { ok: boolean; error?: string; block?: UserUnblockEvent }) => void
 
 type SendMessagePayload = {
   conversationId: unknown
@@ -175,6 +177,30 @@ export function createSocketServer(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     const userId = socket.data.userId as bigint
     socket.join(userRoom(userId))
+
+    socket.on('get_blocked_users', async (_payload: unknown, acknowledge?: BlockedUsersAcknowledgement) => {
+      try {
+        acknowledge?.({ ok: true, users: await getBlockedUsers(userId) })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to load your blocked users. Please try again.' })
+      }
+    })
+
+    socket.on('unblock_user', async (payload: unknown, acknowledge?: UnblockUserAcknowledgement) => {
+      try {
+        const participantId = payload && typeof payload === 'object' && 'participantId' in payload
+          ? toDatabaseId(payload.participantId) : null
+        if (!participantId || participantId === userId) {
+          acknowledge?.({ ok: false, error: 'A valid participant ID is required.' })
+          return
+        }
+        const block = await unblockUser(userId, participantId)
+        io.to([userRoom(userId), userRoom(participantId)]).emit('user_unblocked', block)
+        acknowledge?.({ ok: true, block })
+      } catch {
+        acknowledge?.({ ok: false, error: 'Unable to unblock this user. Please try again.' })
+      }
+    })
 
     socket.on('block_user', async (payload: unknown, acknowledge?: BlockUserAcknowledgement) => {
       try {

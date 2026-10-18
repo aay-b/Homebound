@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Socket } from 'socket.io-client'
 import { ChatWindow } from '@/components/messages/ChatWindow'
+import { BlockedUsersDialog } from '@/components/messages/BlockedUsersDialog'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
 import { useAuth } from '@/contexts/AuthContext'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
@@ -9,7 +10,7 @@ import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMe
 import { getConversationMessages, type StoredMessage } from '@/services/messages'
 import { connectMessagingSocket } from '@/services/socket'
 import { getCurrentMessagingUser, type CurrentMessagingUser } from '@/services/users'
-import type { Conversation, Message, MessageRequest } from '@/types/messages'
+import type { BlockedUser, Conversation, Message, MessageRequest } from '@/types/messages'
 
 // Conversations start empty until the messaging API is connected.
 const initialConversations: Conversation[] = []
@@ -160,6 +161,7 @@ type MessageRequestCancelledEvent = {
 }
 
 type UserBlockEvent = { blockerId: string; blockedId: string }
+type UserUnblockEvent = UserBlockEvent & { isBlocked: boolean }
 
 type AppliedReactionChange = {
   emoji: string
@@ -270,8 +272,15 @@ export function MessagesPage() {
   const [outgoingMessageRequests, setOutgoingMessageRequests] = useState(initialRequests)
   const [resolvedOutgoingRequest, setResolvedOutgoingRequest] = useState<{ requestId: string; recipientId: string } | null>(null)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [isBlockedUsersOpen, setIsBlockedUsersOpen] = useState(false)
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
+  const [isBlockedUsersLoading, setIsBlockedUsersLoading] = useState(false)
+  const [blockedUsersError, setBlockedUsersError] = useState('')
   const socketRef = useRef<Socket | null>(null)
   const blockedParticipantIdsRef = useRef(new Set<string>())
+  const blockVersionRef = useRef(0)
+  const blockChangesRef = useRef(new Map<string, { version: number; isBlocked: boolean }>())
+  const blockedListRequestRef = useRef(0)
   const activeConversationIdRef = useRef<string | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const currentUserId = messagingUser?.id
@@ -305,21 +314,38 @@ export function MessagesPage() {
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
     blockedParticipantIdsRef.current = new Set()
+    blockVersionRef.current = 0
+    blockChangesRef.current = new Map()
+    setIsBlockedUsersOpen(false)
+    setBlockedUsers([])
+    setBlockedUsersError('')
 
-    const handleUserBlocked = (block: UserBlockEvent) => applyUserBlock(block)
+    const handleUserBlocked = (block: UserBlockEvent) => {
+      applyUserBlock(block)
+      if (block.blockerId === currentUserId) loadBlockedUsers()
+    }
+    const handleUserUnblocked = (block: UserUnblockEvent) => {
+      applyUserUnblock(block)
+      if (block.blockerId === currentUserId) loadBlockedUsers()
+    }
     let isCurrentConnection = true
-    const handleConnect = () => {
-      // Rejoin after a network interruption and recover blocks missed while offline.
-      const selectedId = activeConversationIdRef.current
-      if (selectedId) socket.emit('join_conversation', selectedId, () => {})
+    const refreshConversationBlocks = () => {
+      const requestVersion = blockVersionRef.current
       getConversations(currentUserId).then((previews) => {
         if (!isCurrentConnection) return
-        previews.filter((preview) => preview.isBlocked).forEach((preview) => blockedParticipantIdsRef.current.add(preview.participant.id))
+        const statuses = new Map(previews.map((preview) => [preview.id, readConversationBlockStatus(preview, requestVersion)]))
         setConversations((current) => current.map((conversation) => ({
           ...conversation,
-          isBlocked: conversation.isBlocked || blockedParticipantIdsRef.current.has(conversation.participantId),
+          isBlocked: statuses.get(conversation.id) ?? conversation.isBlocked,
         })))
       }).catch((error: unknown) => console.error('Unable to refresh conversation block status.', error))
+    }
+    const handleConnect = () => {
+      // Recover both blocks and unblocks missed while this account was offline.
+      const selectedId = activeConversationIdRef.current
+      if (selectedId) socket.emit('join_conversation', selectedId, () => {})
+      refreshConversationBlocks()
+      loadBlockedUsers()
     }
 
     const handleMessageCreated = (storedMessage: StoredMessage) => {
@@ -390,6 +416,7 @@ export function MessagesPage() {
 
       // The accepting participant opens the new chat immediately; the sender sees it in the sidebar.
       if (resolution.recipientId === currentUserId) setActiveConversationId(conversation.id)
+      refreshConversationBlocks()
     }
 
     const handleMessageRequestCancelled = (cancellation: MessageRequestCancelledEvent) => {
@@ -405,10 +432,12 @@ export function MessagesPage() {
     socket.on('message_request_cancelled', handleMessageRequestCancelled)
     socket.on('message_reaction_updated', handleReactionUpdated)
     socket.on('user_blocked', handleUserBlocked)
+    socket.on('user_unblocked', handleUserUnblocked)
     socket.on('connect', handleConnect)
 
     return () => {
       isCurrentConnection = false
+      blockedListRequestRef.current += 1
       socket.off('message_created', handleMessageCreated)
       socket.off('message_updated', handleMessageUpdated)
       socket.off('message_deleted', handleMessageDeleted)
@@ -418,6 +447,7 @@ export function MessagesPage() {
       socket.off('message_request_cancelled', handleMessageRequestCancelled)
       socket.off('message_reaction_updated', handleReactionUpdated)
       socket.off('user_blocked', handleUserBlocked)
+      socket.off('user_unblocked', handleUserUnblocked)
       socket.off('connect', handleConnect)
       socket.disconnect()
       socketRef.current = null
@@ -473,6 +503,7 @@ export function MessagesPage() {
     // Clear the previous account's selected thread before loading its messaging data.
     setActiveConversationId(null)
     setResolvedOutgoingRequest(null)
+    const requestVersion = blockVersionRef.current
 
     Promise.all([
       getIncomingMessageRequests(currentUserId),
@@ -485,7 +516,7 @@ export function MessagesPage() {
         setOutgoingMessageRequests(outgoingRequests.map(toOutgoingMessageRequest))
         setConversations(loadedConversations.map((preview) => ({
           ...toConversation(preview),
-          isBlocked: Boolean(preview.isBlocked) || blockedParticipantIdsRef.current.has(preview.participant.id),
+          isBlocked: readConversationBlockStatus(preview, requestVersion),
         })))
       })
       .catch((error: unknown) => {
@@ -498,12 +529,74 @@ export function MessagesPage() {
     }
   }, [currentUserId])
 
-  function applyUserBlock(block: UserBlockEvent) {
+  function readConversationBlockStatus(preview: ConversationPreview, requestVersion: number) {
+    const change = blockChangesRef.current.get(preview.participant.id)
+    // A response started before a live block/unblock must not undo that newer action.
+    const isBlocked = change && change.version > requestVersion ? change.isBlocked : Boolean(preview.isBlocked)
+    if (isBlocked) blockedParticipantIdsRef.current.add(preview.participant.id)
+    else blockedParticipantIdsRef.current.delete(preview.participant.id)
+    return isBlocked
+  }
+
+  function applyBlockStatus(block: UserBlockEvent, isBlocked: boolean) {
     if (block.blockerId !== currentUserId && block.blockedId !== currentUserId) return
     const participantId = block.blockerId === currentUserId ? block.blockedId : block.blockerId
-    blockedParticipantIdsRef.current.add(participantId)
+    blockVersionRef.current += 1
+    blockChangesRef.current.set(participantId, { version: blockVersionRef.current, isBlocked })
+    if (isBlocked) blockedParticipantIdsRef.current.add(participantId)
+    else blockedParticipantIdsRef.current.delete(participantId)
     setConversations((current) => current.map((conversation) => conversation.participantId === participantId
-      ? { ...conversation, isBlocked: true } : conversation))
+      ? { ...conversation, isBlocked } : conversation))
+  }
+
+  function applyUserBlock(block: UserBlockEvent) {
+    applyBlockStatus(block, true)
+  }
+
+  function applyUserUnblock(block: UserUnblockEvent) {
+    applyBlockStatus(block, block.isBlocked)
+    if (block.blockerId === currentUserId) setBlockedUsers((current) => current.filter((user) => user.id !== block.blockedId))
+  }
+
+  function loadBlockedUsers() {
+    const requestId = ++blockedListRequestRef.current
+    const socket = socketRef.current
+    setBlockedUsersError('')
+    if (!socket?.connected) {
+      setIsBlockedUsersLoading(false)
+      setBlockedUsersError(getConnectionError())
+      return
+    }
+    setIsBlockedUsersLoading(true)
+    socket.timeout(5000).emit('get_blocked_users', {}, (timeoutError: Error | null, response?: { ok: boolean; error?: string; users?: BlockedUser[] }) => {
+      if (socketRef.current !== socket || requestId !== blockedListRequestRef.current) return
+      setIsBlockedUsersLoading(false)
+      if (timeoutError || !response?.ok || !response.users) {
+        setBlockedUsersError(response?.error ?? 'Unable to load your blocked users. Please try again.')
+        return
+      }
+      setBlockedUsers(response.users)
+    })
+  }
+
+  function unblockParticipant(participantId: string) {
+    const socket = socketRef.current
+    if (!socket?.connected) return Promise.resolve({ ok: false, error: getConnectionError() })
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.timeout(5000).emit('unblock_user', { participantId }, (timeoutError: Error | null, response?: { ok: boolean; error?: string; block?: UserUnblockEvent }) => {
+        if (socketRef.current !== socket) {
+          resolve({ ok: false, error: 'The messaging account has changed.' })
+          return
+        }
+        if (timeoutError || !response?.ok || !response.block) {
+          resolve({ ok: false, error: response?.error ?? 'Unable to unblock this user. Please try again.' })
+          return
+        }
+        applyUserUnblock(response.block)
+        loadBlockedUsers()
+        resolve({ ok: true })
+      })
+    })
   }
 
   function blockParticipant(participantId: string) {
@@ -731,10 +824,11 @@ export function MessagesPage() {
       </nav>
       <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-8 lg:px-12 lg:py-6">
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex-row">
-          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} onOpenBlockedUsers={() => { setIsBlockedUsersOpen(true); loadBlockedUsers() }} />
           <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} />
         </div>
       </div>
+      {isBlockedUsersOpen && <BlockedUsersDialog key={currentUserId} users={blockedUsers} isLoading={isBlockedUsersLoading} error={blockedUsersError} onClose={() => setIsBlockedUsersOpen(false)} onRefresh={loadBlockedUsers} onUnblock={unblockParticipant} />}
     </main>
   )
 }

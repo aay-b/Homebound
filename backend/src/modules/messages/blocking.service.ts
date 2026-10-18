@@ -2,6 +2,8 @@ import { prisma } from '@/config/prisma.js'
 import type { Prisma } from '@/generated/prisma/client.js'
 
 export type UserBlockEvent = { blockerId: string; blockedId: string }
+export type UserUnblockEvent = UserBlockEvent & { isBlocked: boolean }
+export type BlockedUser = { id: string; name: string; role: string; blockedAt: string }
 export const blockedMessagingError = 'You cannot send messages to this person.'
 
 // Both directions share a lock so a send cannot slip past a block being saved concurrently.
@@ -43,5 +45,35 @@ export async function blockUser(blockerId: bigint, blockedId: bigint) {
       update: {},
     })
     return { status: 'blocked' as const, block: { blockerId: blockerId.toString(), blockedId: blockedId.toString() } }
+  })
+}
+
+export async function getBlockedUsers(blockerId: bigint): Promise<BlockedUser[]> {
+  const blocks = await prisma.userBlock.findMany({
+    where: { blockerId },
+    orderBy: [{ blockedAt: 'desc' }, { blockedId: 'asc' }],
+    select: {
+      blockedAt: true,
+      blocked: { select: { id: true, name: true, role: true } },
+    },
+  })
+  return blocks.map((block) => ({
+    id: block.blocked.id.toString(),
+    name: block.blocked.name,
+    role: block.blocked.role,
+    blockedAt: block.blockedAt.toISOString(),
+  }))
+}
+
+export async function unblockUser(blockerId: bigint, blockedId: bigint): Promise<UserUnblockEvent> {
+  return prisma.$transaction(async (transaction) => {
+    await lockMessagingPair(transaction, blockerId, blockedId)
+    // Remove only the caller's block; a block in the other direction still applies.
+    await transaction.userBlock.deleteMany({ where: { blockerId, blockedId } })
+    return {
+      blockerId: blockerId.toString(),
+      blockedId: blockedId.toString(),
+      isBlocked: await hasBlockBetween(blockerId, blockedId, transaction),
+    }
   })
 }

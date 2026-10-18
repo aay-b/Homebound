@@ -4,6 +4,7 @@ import type { Socket } from 'socket.io-client'
 import { ChatWindow } from '@/components/messages/ChatWindow'
 import { BlockedUsersDialog } from '@/components/messages/BlockedUsersDialog'
 import { ConversationSidebar } from '@/components/messages/ConversationSidebar'
+import { MessagingAvatarProvider } from '@/components/messages/UserAvatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
 import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest, type IncomingMessageRequest, type OutgoingMessageRequest } from '@/services/messageRequests'
@@ -11,6 +12,7 @@ import { getConversationMessages, type StoredMessage } from '@/services/messages
 import { connectMessagingSocket } from '@/services/socket'
 import { getCurrentMessagingUser, type CurrentMessagingUser } from '@/services/users'
 import type { BlockedUser, Conversation, Message, MessageRequest } from '@/types/messages'
+import { formatMessageTime } from '@/utils/messageTime'
 
 // Conversations start empty until the messaging API is connected.
 const initialConversations: Conversation[] = []
@@ -18,17 +20,12 @@ const initialConversations: Conversation[] = []
 // Requests start empty until the backend request endpoint is connected.
 const initialRequests: MessageRequest[] = []
 
-function getInitials(name: string) {
-  return name.split(' ').map((word) => word[0]).join('').slice(0, 2)
-}
-
 function toConversation(preview: ConversationPreview): Conversation {
   return {
     id: preview.id,
     participantId: preview.participant.id,
     isBlocked: preview.isBlocked ?? false,
     participantName: preview.participant.name,
-    participantInitials: getInitials(preview.participant.name),
     participantRole: preview.participant.role === 'shelter_staff' ? 'shelterStaff' : 'user',
     lastMessage: '',
     lastMessageTime: '',
@@ -42,7 +39,6 @@ function toMessageRequest(request: IncomingMessageRequest): MessageRequest {
     id: request.id,
     personId: request.sender.id,
     name: request.sender.name,
-    initials: getInitials(request.sender.name),
     note: request.sender.role === 'shelter_staff' ? 'Shelter staff' : 'User',
   }
 }
@@ -52,20 +48,8 @@ function toOutgoingMessageRequest(request: OutgoingMessageRequest): MessageReque
     id: request.id,
     personId: request.recipient.id,
     name: request.recipient.name,
-    initials: getInitials(request.recipient.name),
     note: request.recipient.role === 'shelter_staff' ? 'Shelter staff' : 'User',
   }
-}
-
-function formatMessageTime(createdAt: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date(createdAt))
 }
 
 function toMessage(storedMessage: StoredMessage): Message {
@@ -163,6 +147,14 @@ type MessageRequestCancelledEvent = {
 type UserBlockEvent = { blockerId: string; blockedId: string }
 type UserUnblockEvent = UserBlockEvent & { isBlocked: boolean }
 
+type HistoryEvent =
+  | { type: 'created'; message: StoredMessage }
+  | { type: 'edited'; update: MessageUpdate }
+  | { type: 'deleted'; deletion: MessageDeletion }
+  | { type: 'reaction'; update: MessageReactionUpdate }
+
+type HistoryRequest = { controller: AbortController; events: HistoryEvent[]; promise: Promise<void> }
+
 type AppliedReactionChange = {
   emoji: string
   action: 'added' | 'removed'
@@ -173,6 +165,7 @@ function applyReactionChange(message: Message, change: AppliedReactionChange, up
   const isCurrentUserReaction = update.userId === currentUserId
 
   if (change.action === 'added') {
+    if (existingReaction?.reactors.some((reactor) => reactor.id === update.userId)) return message
     const reaction = {
       emoji: change.emoji,
       count: (existingReaction?.count ?? 0) + 1,
@@ -191,7 +184,7 @@ function applyReactionChange(message: Message, change: AppliedReactionChange, up
     }
   }
 
-  if (!existingReaction) return message
+  if (!existingReaction || !existingReaction.reactors.some((reactor) => reactor.id === update.userId)) return message
 
   const reaction = {
     ...existingReaction,
@@ -276,7 +269,11 @@ export function MessagesPage() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [isBlockedUsersLoading, setIsBlockedUsersLoading] = useState(false)
   const [blockedUsersError, setBlockedUsersError] = useState('')
+  const [historyStatus, setHistoryStatus] = useState<{ conversationId: string | null; loading: boolean; error: string }>({ conversationId: null, loading: false, error: '' })
   const socketRef = useRef<Socket | null>(null)
+  const historyRequestsRef = useRef(new Map<string, HistoryRequest>())
+  const historyLoadedAtRef = useRef(new Map<string, number>())
+  const historyGenerationRef = useRef(0)
   const blockedParticipantIdsRef = useRef(new Set<string>())
   const blockVersionRef = useRef(0)
   const blockChangesRef = useRef(new Map<string, { version: number; isBlocked: boolean }>())
@@ -284,6 +281,7 @@ export function MessagesPage() {
   const activeConversationIdRef = useRef<string | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const currentUserId = messagingUser?.id
+  const recentConversationIds = conversations.slice(0, 3).map((conversation) => conversation.id).join(',')
 
   useEffect(() => {
     let isCurrentUser = true
@@ -313,6 +311,9 @@ export function MessagesPage() {
     // Reconnect whenever the authenticated messaging account changes.
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
+    historyGenerationRef.current += 1
+    historyLoadedAtRef.current.clear()
+    setHistoryStatus({ conversationId: null, loading: false, error: '' })
     blockedParticipantIdsRef.current = new Set()
     blockVersionRef.current = 0
     blockChangesRef.current = new Map()
@@ -344,11 +345,13 @@ export function MessagesPage() {
       // Recover both blocks and unblocks missed while this account was offline.
       const selectedId = activeConversationIdRef.current
       if (selectedId) socket.emit('join_conversation', selectedId, () => {})
+      if (selectedId) void loadConversationHistory(selectedId, true).catch(() => {})
       refreshConversationBlocks()
       loadBlockedUsers()
     }
 
     const handleMessageCreated = (storedMessage: StoredMessage) => {
+      historyRequestsRef.current.get(storedMessage.conversationId)?.events.push({ type: 'created', message: storedMessage })
       // Use the database ID to ignore a duplicate received through the event acknowledgement.
       setConversations((currentConversations) => currentConversations.map((conversation) => (
         conversation.id === storedMessage.conversationId
@@ -358,6 +361,7 @@ export function MessagesPage() {
     }
 
     const handleReactionUpdated = (update: MessageReactionUpdate) => {
+      historyRequestsRef.current.get(update.conversationId)?.events.push({ type: 'reaction', update })
       setConversations((currentConversations) => currentConversations.map((conversation) => (
         conversation.id === update.conversationId
           ? applyReactionUpdate(conversation, update, currentUserId)
@@ -366,6 +370,7 @@ export function MessagesPage() {
     }
 
     const handleMessageUpdated = (update: MessageUpdate) => {
+      historyRequestsRef.current.get(update.conversationId)?.events.push({ type: 'edited', update })
       setConversations((currentConversations) => currentConversations.map((conversation) => (
         conversation.id === update.conversationId
           ? applyMessageUpdate(conversation, update)
@@ -374,6 +379,7 @@ export function MessagesPage() {
     }
 
     const handleMessageDeleted = (deletion: MessageDeletion) => {
+      historyRequestsRef.current.get(deletion.conversationId)?.events.push({ type: 'deleted', deletion })
       setConversations((currentConversations) => currentConversations.map((conversation) => (
         conversation.id === deletion.conversationId
           ? applyMessageDeletion(conversation, deletion)
@@ -382,6 +388,9 @@ export function MessagesPage() {
     }
 
     const handleConversationDeleted = (deletion: ConversationDeletion) => {
+      historyRequestsRef.current.get(deletion.id)?.controller.abort()
+      historyRequestsRef.current.delete(deletion.id)
+      historyLoadedAtRef.current.delete(deletion.id)
       setConversations((currentConversations) => currentConversations.filter((conversation) => conversation.id !== deletion.id))
       setActiveConversationId((currentConversationId) => currentConversationId === deletion.id ? null : currentConversationId)
     }
@@ -437,6 +446,9 @@ export function MessagesPage() {
 
     return () => {
       isCurrentConnection = false
+      historyGenerationRef.current += 1
+      historyRequestsRef.current.forEach((request) => request.controller.abort())
+      historyRequestsRef.current.clear()
       blockedListRequestRef.current += 1
       socket.off('message_created', handleMessageCreated)
       socket.off('message_updated', handleMessageUpdated)
@@ -468,26 +480,35 @@ export function MessagesPage() {
     if (!activeConversationId || !currentUserId) return
 
     let isCurrentConversation = true
-
-    getConversationMessages(currentUserId, activeConversationId)
-      .then((storedMessages) => {
-        if (!isCurrentConversation) return
-
-        // Merge rather than replace so a real-time message arriving during the request is retained.
-        setConversations((currentConversations) => currentConversations.map((conversation) => (
-          conversation.id === activeConversationId
-            ? mergeConversationMessages(conversation, storedMessages.map(toMessage))
-            : conversation
-        )))
+    setHistoryStatus({ conversationId: activeConversationId, loading: !historyLoadedAtRef.current.has(activeConversationId), error: '' })
+    loadConversationHistory(activeConversationId, true)
+      .then(() => {
+        if (isCurrentConversation) setHistoryStatus({ conversationId: activeConversationId, loading: false, error: '' })
       })
       .catch((error: unknown) => {
-        if (isCurrentConversation) console.error('Unable to load conversation messages.', error)
+        if (isCurrentConversation) setHistoryStatus({ conversationId: activeConversationId, loading: false, error: error instanceof Error ? error.message : 'Unable to load conversation messages.' })
       })
 
     return () => {
       isCurrentConversation = false
     }
   }, [activeConversationId, currentUserId])
+
+  useEffect(() => {
+    if (!currentUserId || !recentConversationIds) return
+    const queue = recentConversationIds.split(',')
+    let cancelled = false
+    async function warmConversations() {
+      while (!cancelled && queue.length > 0) {
+        const id = queue.shift()!
+        await loadConversationHistory(id).catch(() => {})
+      }
+    }
+    // Limit background work so history prefetching does not crowd out an actively opened chat.
+    void warmConversations()
+    void warmConversations()
+    return () => { cancelled = true }
+  }, [currentUserId, recentConversationIds])
 
   useEffect(() => {
     if (!currentUserId) {
@@ -528,6 +549,55 @@ export function MessagesPage() {
       isCurrentAccount = false
     }
   }, [currentUserId])
+
+  function loadConversationHistory(conversationId: string, force = false): Promise<void> {
+    if (!currentUserId) return Promise.resolve()
+    const pending = historyRequestsRef.current.get(conversationId)
+    if (pending) return pending.promise
+    if (!force && Date.now() - (historyLoadedAtRef.current.get(conversationId) ?? 0) < 30_000) return Promise.resolve()
+
+    const generation = historyGenerationRef.current
+    const request: HistoryRequest = { controller: new AbortController(), events: [], promise: Promise.resolve() }
+    historyRequestsRef.current.set(conversationId, request)
+    request.promise = getConversationMessages(currentUserId, conversationId, request.controller.signal)
+      .then((storedMessages) => {
+        if (request.controller.signal.aborted || historyGenerationRef.current !== generation) return
+        const messages = storedMessages.map(toMessage)
+        const events = [...request.events]
+        historyLoadedAtRef.current.set(conversationId, Date.now())
+        setConversations((current) => current.map((conversation) => {
+          if (conversation.id !== conversationId) return conversation
+          // Replace the server snapshot, then preserve live changes received during this request.
+          let updated = mergeConversationMessages({ ...conversation, messages: [] }, messages)
+          for (const event of events) {
+            if (event.type === 'created') updated = mergeConversationMessages(updated, [toMessage(event.message)])
+            else if (event.type === 'edited') updated = applyMessageUpdate(updated, event.update)
+            else if (event.type === 'deleted') updated = applyMessageDeletion(updated, event.deletion)
+            else updated = applyReactionUpdate(updated, event.update, currentUserId)
+          }
+          return updated
+        }))
+      })
+      .finally(() => {
+        if (historyRequestsRef.current.get(conversationId) === request) historyRequestsRef.current.delete(conversationId)
+      })
+    return request.promise
+  }
+
+  function prefetchConversation(conversationId: string) {
+    void loadConversationHistory(conversationId).catch(() => {})
+  }
+
+  function retryConversationHistory() {
+    if (!activeConversationId) return
+    const conversationId = activeConversationId
+    setHistoryStatus({ conversationId, loading: true, error: '' })
+    void loadConversationHistory(conversationId, true).then(() => {
+      if (activeConversationIdRef.current === conversationId) setHistoryStatus({ conversationId, loading: false, error: '' })
+    }).catch((error: unknown) => {
+      if (activeConversationIdRef.current === conversationId) setHistoryStatus({ conversationId, loading: false, error: error instanceof Error ? error.message : 'Unable to load conversation messages.' })
+    })
+  }
 
   function readConversationBlockStatus(preview: ConversationPreview, requestVersion: number) {
     const change = blockChangesRef.current.get(preview.participant.id)
@@ -645,6 +715,7 @@ export function MessagesPage() {
           }
 
           // The acknowledgement covers the short interval before this client finishes joining the room.
+          historyRequestsRef.current.get(storedMessage.conversationId)?.events.push({ type: 'created', message: storedMessage })
           setConversations((currentConversations) => currentConversations.map((conversation) => (
             conversation.id === storedMessage.conversationId
               ? mergeConversationMessages(conversation, [toMessage(storedMessage)])
@@ -806,6 +877,7 @@ export function MessagesPage() {
   }
 
   return (
+    <MessagingAvatarProvider key={currentUserId} accountId={currentUserId}>
     <main className="flex h-dvh flex-col overflow-hidden bg-stone-50 text-stone-900">
       <nav className="relative z-50 shrink-0 border-b border-stone-200 bg-white/95 px-6 py-4 backdrop-blur md:px-10">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -824,11 +896,12 @@ export function MessagesPage() {
       </nav>
       <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-8 lg:px-12 lg:py-6">
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex-row">
-          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} onOpenBlockedUsers={() => { setIsBlockedUsersOpen(true); loadBlockedUsers() }} />
-          <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} />
+          <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onConversationPrefetch={prefetchConversation} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} onOpenBlockedUsers={() => { setIsBlockedUsersOpen(true); loadBlockedUsers() }} />
+          <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} isHistoryLoading={historyStatus.conversationId === activeConversationId ? historyStatus.loading : !historyLoadedAtRef.current.has(activeConversationId ?? '')} historyError={historyStatus.conversationId === activeConversationId ? historyStatus.error : ''} onRetryHistory={retryConversationHistory} />
         </div>
       </div>
       {isBlockedUsersOpen && <BlockedUsersDialog key={currentUserId} users={blockedUsers} isLoading={isBlockedUsersLoading} error={blockedUsersError} onClose={() => setIsBlockedUsersOpen(false)} onRefresh={loadBlockedUsers} onUnblock={unblockParticipant} />}
     </main>
+    </MessagingAvatarProvider>
   )
 }

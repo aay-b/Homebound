@@ -233,12 +233,7 @@ export async function getConversationMessages(
   conversationId: bigint,
   currentUserId: bigint,
 ): Promise<ConversationMessagesResult> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true },
-  })
-  if (!conversation) return { status: 'not_found', messages: [] }
-
+  // This indexed membership lookup also establishes that the conversation exists.
   const membership = await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId: currentUserId } },
     select: { conversationId: true },

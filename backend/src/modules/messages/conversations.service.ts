@@ -21,12 +21,22 @@ type DeleteConversationResult =
   | { status: 'not_a_member' }
   | { status: 'deleted'; deletion: ConversationDeletion }
 
-export async function getConversations(currentUserId: bigint): Promise<ConversationsResult> {
+export async function getConversations(currentUserId: bigint, searchQuery = ''): Promise<ConversationsResult> {
   const currentUser = await prisma.user.findUnique({ where: { id: currentUserId }, select: { id: true } })
   if (!currentUser) return { status: 'not_found', conversations: [] }
 
+  const keyword = searchQuery.trim()
   const conversations = await prisma.conversation.findMany({
-    where: { members: { some: { userId: currentUserId } } },
+    where: {
+      members: { some: { userId: currentUserId } },
+      // Match the other participant, never the signed-in user's own name.
+      AND: keyword ? [{
+        members: { some: {
+          userId: { not: currentUserId },
+          user: { name: { contains: keyword, mode: 'insensitive' } },
+        } },
+      }] : undefined,
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,

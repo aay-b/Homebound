@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '@/modules/auth/auth.middleware.js'
 import { prisma } from '@/config/prisma.js'
 import { searchPeople } from '@/modules/users/users.service.js'
+import { getMessagingAvatarUrls } from '@/modules/users/user-avatars.service.js'
 
 const searchPeopleQuerySchema = z.object({
   q: z.string().trim().min(1).max(100),
@@ -11,6 +12,22 @@ const searchPeopleQuerySchema = z.object({
 })
 
 export const usersRouter = Router()
+
+usersRouter.post('/avatars', requireAuth, async (request, response, next) => {
+  try {
+    const parsed = z.object({
+      userIds: z.array(z.string().regex(/^[1-9]\d{0,18}$/).transform((id) => BigInt(id)).refine((id) => id <= 9223372036854775807n)).min(1).max(100),
+    }).safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ message: 'Valid user IDs are required.' })
+      return
+    }
+    response.setHeader('Cache-Control', 'no-store')
+    response.json({ avatars: await getMessagingAvatarUrls(parsed.data.userIds) })
+  } catch (error) {
+    next(error)
+  }
+})
 
 usersRouter.get('/me', requireAuth, async (request, response, next) => {
   try {

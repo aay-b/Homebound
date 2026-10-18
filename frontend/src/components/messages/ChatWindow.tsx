@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { BlockParticipantDialog } from '@/components/messages/BlockParticipantDialog'
+import { UserAvatar } from '@/components/messages/UserAvatar'
 import type { Conversation, Message } from '@/types/messages'
+import { formatMessageTime } from '@/utils/messageTime'
 
 type SendMessageResult = {
   ok: boolean
@@ -20,12 +22,15 @@ type ChatWindowProps = {
   onDeleteMessage: (messageId: string) => void
   onToggleReaction: (messageId: string, emoji: string) => void
   onBlockParticipant: (participantId: string) => Promise<SendMessageResult>
+  isHistoryLoading: boolean
+  historyError: string
+  onRetryHistory: () => void
 }
 
 // These are the six reaction options available in the current messaging UI.
 const reactionOptions = ['👍', '❤️', '😂', '😮', '😢', '😡']
 
-export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditMessage, onDeleteMessage, onToggleReaction, onBlockParticipant }: ChatWindowProps) {
+export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditMessage, onDeleteMessage, onToggleReaction, onBlockParticipant, isHistoryLoading, historyError, onRetryHistory }: ChatWindowProps) {
   const [draft, setDraft] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
@@ -42,13 +47,16 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const [blockError, setBlockError] = useState('')
   const isParticipantBlocked = conversation?.isBlocked ?? false
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const scrollStateRef = useRef<{ conversationId?: string; messageCount: number }>({ messageCount: 0 })
   const isSendingRef = useRef(false)
   const isEditingRef = useRef(false)
 
-  useEffect(() => {
-    // Scroll only the message pane so receiving a message never moves the entire page.
+  useLayoutEffect(() => {
+    // Open at the latest message before painting; animate only subsequent live messages.
     const messagesContainer = messagesContainerRef.current
-    messagesContainer?.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' })
+    const isOpening = scrollStateRef.current.conversationId !== conversation?.id || scrollStateRef.current.messageCount === 0
+    messagesContainer?.scrollTo({ top: messagesContainer.scrollHeight, behavior: isOpening ? 'auto' : 'smooth' })
+    scrollStateRef.current = { conversationId: conversation?.id, messageCount: conversation?.messages.length ?? 0 }
   }, [conversation?.id, conversation?.messages.length])
 
   useEffect(() => {
@@ -156,7 +164,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       <header className="shrink-0 border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-full bg-[#FABF6B]/40 text-sm font-bold text-[#344336]">{conversation.participantInitials}</div>
+            <UserAvatar userId={conversation.participantId} name={conversation.participantName} className="h-11 w-11" />
             <div>
               <h2 className="font-bold text-slate-900">{conversation.participantName}</h2>
             </div>
@@ -173,12 +181,26 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       </header>
 
       <div ref={messagesContainerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 pb-6 pt-10 sm:px-7">
+        {isHistoryLoading && conversation.messages.length === 0 && (
+          <div role="status" aria-label="Loading messages" className="space-y-4 motion-safe:animate-pulse">
+            <span className="sr-only">Loading messages...</span>
+            <div aria-hidden="true" className="h-14 w-44 max-w-[70%] rounded-2xl bg-[#757A5E]/10" />
+            <div aria-hidden="true" className="ml-auto h-14 w-52 max-w-[70%] rounded-2xl bg-[#757A5E]/20" />
+            <div aria-hidden="true" className="h-14 w-36 max-w-[70%] rounded-2xl bg-[#757A5E]/10" />
+          </div>
+        )}
+        {historyError && (
+          <div className="rounded-xl bg-[#D15A4A]/5 p-3 text-sm text-[#A74337]">
+            <p role="alert">{historyError}</p>
+            <button type="button" onClick={onRetryHistory} className="mt-2 font-semibold underline underline-offset-4">Try again</button>
+          </div>
+        )}
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
           const isEditing = !isParticipantBlocked && editingMessageId === message.id
           return (
             <div key={message.id} className={`flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-              {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FABF6B]/40 text-[10px] font-bold text-[#344336]">{conversation.participantInitials}</div>}
+              {!isOwnMessage && <UserAvatar userId={conversation.participantId} name={conversation.participantName} className="mt-1 h-8 w-8" />}
               <div className={`group/action relative w-fit min-w-0 max-w-[78%] sm:max-w-[360px] ${message.reactions.length > 0 ? 'pb-7' : ''} ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                 <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-[#757A5E] text-white' : 'rounded-bl-md bg-white text-[#344336] ring-1 ring-[#757A5E]/15'}`}>
                   {isEditing ? (
@@ -193,7 +215,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   ) : (
                     <>
                       <p className="break-words [overflow-wrap:anywhere] text-sm leading-6">{message.content}</p>
-                      <time dateTime={message.createdAt} className={`mt-1 block text-[10px] ${isOwnMessage ? 'text-right text-white/65' : 'text-left text-slate-400'}`}>{message.sentAt}</time>
+                      <time dateTime={message.createdAt} className={`mt-1 block text-[10px] ${isOwnMessage ? 'text-right text-white/65' : 'text-left text-slate-400'}`}>{formatMessageTime(message.createdAt)}</time>
                     </>
                   )}
                   {/* The transparent bridge preserves hover while the pointer crosses the visual gap. */}

@@ -29,7 +29,6 @@ export type Conversation = {
   participantId: string
   isBlocked: boolean
   participantName: string
-  participantInitials: string
   participantRole: UserRole
   lastMessage: string
   lastMessageTime: string
@@ -41,7 +40,6 @@ export type MessageRequest = {
   id: string
   personId: string
   name: string
-  initials: string
   note: string
 }
 

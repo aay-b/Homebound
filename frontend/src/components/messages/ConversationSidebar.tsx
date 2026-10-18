@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { sendMessageRequest } from '@/services/messageRequests'
 import { searchPeople } from '@/services/users'
 import type { Conversation, MessageRequest, SearchPerson } from '@/types/messages'
+import { UserAvatar } from '@/components/messages/UserAvatar'
 
 type ConversationSidebarProps = {
   currentUserId: string
@@ -11,6 +12,7 @@ type ConversationSidebarProps = {
   outgoingMessageRequests: MessageRequest[]
   resolvedOutgoingRequest?: { requestId: string; recipientId: string } | null
   onConversationSelect: (conversationId: string) => void
+  onConversationPrefetch: (conversationId: string) => void
   onRequestAction: (requestId: string, action: 'accept' | 'decline') => void
   onCancelOutgoingRequest: (requestId: string) => Promise<void>
   onOutgoingRequestCreated: (request: MessageRequest) => void
@@ -26,6 +28,7 @@ export function ConversationSidebar({
   outgoingMessageRequests,
   resolvedOutgoingRequest,
   onConversationSelect,
+  onConversationPrefetch,
   onRequestAction,
   onCancelOutgoingRequest,
   onOutgoingRequestCreated,
@@ -33,6 +36,7 @@ export function ConversationSidebar({
   onOpenBlockedUsers,
 }: ConversationSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [conversationSearchQuery, setConversationSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchPerson[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
@@ -44,6 +48,11 @@ export function ConversationSidebar({
   const [conversationDeleteError, setConversationDeleteError] = useState('')
   const [isDeletingConversation, setIsDeletingConversation] = useState(false)
   const conversationPendingDeletion = conversations.find((conversation) => conversation.id === conversationIdPendingDeletion)
+  const conversationKeyword = conversationSearchQuery.trim().toLocaleLowerCase('en-US')
+  // All conversation previews are already loaded, so filtering can respond immediately to typing.
+  const matchingConversations = conversations.filter((conversation) => (
+    conversation.participantName.toLocaleLowerCase('en-US').includes(conversationKeyword)
+  ))
 
   useEffect(() => {
     // Close a conversation context menu when the user interacts anywhere else on the page.
@@ -57,6 +66,7 @@ export function ConversationSidebar({
     // This set only covers requests sent during the current page session.
     setRequestError('')
     setSentRecipientIds(new Set())
+    setConversationSearchQuery('')
   }, [currentUserId])
 
   useEffect(() => {
@@ -116,7 +126,6 @@ export function ConversationSidebar({
         id: requestId,
         personId: person.id,
         name: person.name,
-        initials: person.name.split(' ').map((name) => name[0]).join('').slice(0, 2),
         note: person.role === 'shelter_staff' ? 'Shelter staff' : 'User',
       })
       // The new request is visible in the sent section, so close the completed search flow.
@@ -184,7 +193,7 @@ export function ConversationSidebar({
 
                   return (
                     <li key={person.id} className="flex items-center gap-2 rounded-lg px-2 py-2">
-                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FABF6B]/35 text-xs font-bold text-[#344336]">{person.name.split(' ').map((name) => name[0]).join('').slice(0, 2)}</div>
+                      <UserAvatar userId={person.id} name={person.name} className="h-8 w-8" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-800">{person.name}</p>
                         <p className="text-xs text-slate-500">{person.role === 'shelter_staff' ? 'Shelter staff' : 'User'}</p>
@@ -219,7 +228,7 @@ export function ConversationSidebar({
             {messageRequests.map((request) => (
               <div key={request.id} className="rounded-xl border border-slate-200 p-3">
                 <div className="flex gap-2.5">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#FABF6B]/35 text-xs font-bold text-[#344336]">{request.initials}</div>
+                  <UserAvatar userId={request.personId} name={request.name} className="h-9 w-9" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-slate-800">{request.name}</p>
                     <p className="truncate text-xs text-slate-500">{request.note}</p>
@@ -237,12 +246,12 @@ export function ConversationSidebar({
 
       {outgoingMessageRequests.length > 0 && (
         <section className="border-b border-slate-100 px-4 py-4">
-          <h2 className="mb-3 px-1 text-sm font-bold text-slate-800">Requests you&apos;ve sent</h2>
+          <h2 className="mb-3 px-1 text-sm font-bold text-slate-800">Requests you have sent</h2>
           <div className="space-y-2">
             {outgoingMessageRequests.map((request) => (
               <div key={request.id} className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#FABF6B]/25 text-xs font-bold text-[#344336]">{request.initials}</div>
+                  <UserAvatar userId={request.personId} name={request.name} className="h-9 w-9" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-slate-800">{request.name}</p>
                     <p className="truncate text-xs text-slate-500">Pending · {request.note}</p>
@@ -257,9 +266,13 @@ export function ConversationSidebar({
 
       <section className="px-4 py-4">
         <h2 className="mb-3 px-1 text-sm font-bold text-slate-800">Conversations</h2>
+        <label className="mb-3 flex items-center gap-2 rounded-xl border border-[#757A5E]/25 bg-white px-3 py-2.5 focus-within:border-[#757A5E]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4 shrink-0 text-[#344336]" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+          <input type="search" value={conversationSearchQuery} onChange={(event) => { setConversationSearchQuery(event.target.value); setContextMenuConversationId(null) }} maxLength={100} placeholder="Search conversations" aria-label="Search conversations by participant name" className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400" />
+        </label>
         <div className="space-y-1.5">
-          {conversations.length === 0 && <p className="px-1 py-2 text-sm text-slate-500">No conversations yet.</p>}
-          {conversations.map((conversation) => {
+          {matchingConversations.length === 0 && <p role="status" className="px-1 py-2 text-sm text-slate-500">{conversationKeyword ? 'No matching conversations.' : 'No conversations yet.'}</p>}
+          {matchingConversations.map((conversation) => {
             const isActive = conversation.id === activeConversationId
             return (
               <div key={conversation.id} className="relative overflow-hidden rounded-xl">
@@ -273,8 +286,8 @@ export function ConversationSidebar({
                     </svg>
                   </button>
                 )}
-                <button onClick={() => { onConversationSelect(conversation.id); setContextMenuConversationId(null) }} onContextMenu={(event) => { event.preventDefault(); setContextMenuConversationId(conversation.id) }} className={`relative z-10 flex items-center p-3 text-left transition-[width,gap] duration-200 ease-out ${contextMenuConversationId === conversation.id ? 'w-[calc(100%-3rem)] gap-2 rounded-l-xl' : 'w-full gap-3 rounded-xl'} ${isActive ? contextMenuConversationId === conversation.id ? 'bg-[#FABF6B]/20' : 'bg-[#FABF6B]/20 ring-1 ring-inset ring-[#FABF6B]/60' : 'bg-[#fffdf9] hover:bg-[#757A5E]/10'}`}>
-                  <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold ${isActive ? 'bg-[#757A5E] text-white' : 'bg-[#757A5E]/15 text-[#344336]'}`}>{conversation.participantInitials}</div>
+                <button onPointerEnter={() => onConversationPrefetch(conversation.id)} onFocus={() => onConversationPrefetch(conversation.id)} onClick={() => { onConversationSelect(conversation.id); setContextMenuConversationId(null) }} onContextMenu={(event) => { event.preventDefault(); setContextMenuConversationId(conversation.id) }} className={`relative z-10 flex items-center p-3 text-left transition-[width,gap] duration-200 ease-out ${contextMenuConversationId === conversation.id ? 'w-[calc(100%-3rem)] gap-2 rounded-l-xl' : 'w-full gap-3 rounded-xl'} ${isActive ? contextMenuConversationId === conversation.id ? 'bg-[#FABF6B]/20' : 'bg-[#FABF6B]/20 ring-1 ring-inset ring-[#FABF6B]/60' : 'bg-[#fffdf9] hover:bg-[#757A5E]/10'}`}>
+                  <UserAvatar userId={conversation.participantId} name={conversation.participantName} className={`h-11 w-11 ${isActive ? 'ring-2 ring-[#FABF6B]/60' : ''}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-bold text-slate-800">{conversation.participantName}</p>

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { BlockedUser } from '@/types/messages'
+import { UserAvatar } from '@/components/messages/UserAvatar'
+import { formatMessageTime } from '@/utils/messageTime'
+
+const blockedDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: '2-digit', day: '2-digit', year: 'numeric',
+})
 
 type BlockedUsersDialogProps = {
   users: BlockedUser[]
@@ -57,7 +63,7 @@ export function BlockedUsersDialog({ users, isLoading, error, onClose, onRefresh
       </div>
       {selectedUser ? (
         <div className="p-6">
-          <p className="text-sm leading-6 text-slate-600">They'll be removed from your blocked list.</p>
+          <p className="text-sm leading-6 text-slate-600">This person will be removed from your blocked list.</p>
           {unblockError && <p role="alert" className="mt-3 text-sm text-[#C44B3B]">{unblockError}</p>}
           <div className="mt-6 flex justify-end gap-3">
             <button type="button" disabled={isSubmitting} onClick={() => { setSelectedUser(null); setUnblockError('') }} className="rounded-lg border border-[#757A5E]/30 px-4 py-2 text-sm font-semibold transition hover:bg-[#FABF6B]/15 disabled:opacity-50">Cancel</button>
@@ -72,9 +78,12 @@ export function BlockedUsersDialog({ users, isLoading, error, onClose, onRefresh
                 : <ul className="space-y-4" aria-label="People you have blocked">
                   {users.map((user) => (
                     <li key={user.id} className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#FABF6B]/30 text-xs font-bold" aria-hidden="true">{user.name.trim().split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase()}</div>
+                      <UserAvatar userId={user.id} name={user.name} className="h-10 w-10" />
                       <div className="min-w-0 flex-1">
                         <p className="break-words text-sm font-semibold">{user.name}</p>
+                        <time dateTime={user.blockedAt} className="mt-1 block text-[11px] leading-5 text-slate-500">
+                          Blocked on {blockedDateFormatter.format(new Date(user.blockedAt))} at {formatMessageTime(user.blockedAt)}
+                        </time>
                       </div>
                       <button type="button" onClick={() => { setSelectedUser(user); setUnblockError('') }} aria-label={`Unblock ${user.name}`} className="shrink-0 rounded-lg border border-[#757A5E]/30 px-3 py-2 text-xs font-semibold transition hover:bg-[#757A5E]/10">Unblock</button>
                     </li>

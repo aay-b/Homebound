@@ -11,8 +11,9 @@ type ConversationsResponse = {
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'
 
-export async function getConversations(currentUserId: string): Promise<ConversationPreview[]> {
+export async function getConversations(currentUserId: string, query = ''): Promise<ConversationPreview[]> {
   const searchParams = new URLSearchParams({ currentUserId })
+  if (query.trim()) searchParams.set('q', query.trim())
   const response = await fetch(`${apiBaseUrl}/conversations?${searchParams}`)
   const payload = await response.json() as ConversationsResponse
 

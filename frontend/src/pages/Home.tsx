@@ -251,7 +251,7 @@ export default function Home() {
 
                 <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="group rounded-3xl bg-stone-100 p-7 transition hover:-translate-y-1 hover:shadow-lg">
-                        <div className="text-5xl">🐶</div>
+                        <div aria-hidden="true" className="grid size-14 -translate-x-2 place-items-center text-5xl leading-none">🐶</div>
 
                         <h3 className="mt-6 text-xl font-bold">
                             Dogs
@@ -263,7 +263,7 @@ export default function Home() {
                     </div>
 
                     <div className="group rounded-3xl bg-stone-100 p-7 transition hover:-translate-y-1 hover:shadow-lg">
-                        <div className="text-5xl">🐱</div>
+                        <div aria-hidden="true" className="grid size-14 -translate-x-2 place-items-center text-5xl leading-none">🐱</div>
 
                         <h3 className="mt-6 text-xl font-bold">
                             Cats
@@ -275,7 +275,7 @@ export default function Home() {
                     </div>
 
                     <div className="group rounded-3xl bg-stone-100 p-7 transition hover:-translate-y-1 hover:shadow-lg">
-                        <div className="text-5xl">🐰</div>
+                        <div aria-hidden="true" className="grid size-14 -translate-x-2 place-items-center text-5xl leading-none">🐰</div>
 
                         <h3 className="mt-6 text-xl font-bold">
                             Small Pets
@@ -287,7 +287,7 @@ export default function Home() {
                     </div>
 
                     <div className="group rounded-3xl bg-stone-100 p-7 transition hover:-translate-y-1 hover:shadow-lg">
-                        <div className="text-5xl">🐾</div>
+                        <div aria-hidden="true" className="grid size-14 -translate-x-2 place-items-center text-5xl leading-none">🐾</div>
 
                         <h3 className="mt-6 text-xl font-bold">
                             More Pets

@@ -564,6 +564,7 @@ export function MessagesPage() {
   }
 
   function editMessage(messageId: string, content: string) {
+    if (activeConversation?.isBlocked) return Promise.resolve({ ok: false, error: 'You cannot edit messages in this conversation.' })
     const socket = socketRef.current
     if (!socket || !socket.connected) {
       return Promise.resolve({ ok: false, error: getConnectionError() })
@@ -592,6 +593,7 @@ export function MessagesPage() {
   }
 
   function deleteMessage(messageId: string) {
+    if (activeConversation?.isBlocked) return
     const socket = socketRef.current
     if (!socket || !socket.connected) {
       console.error(getConnectionError())
@@ -640,6 +642,7 @@ export function MessagesPage() {
   }
 
   function toggleReaction(messageId: string, emoji: string) {
+    if (activeConversation?.isBlocked) return
     const socket = socketRef.current
     if (!socket || !socket.connected) {
       console.error(getConnectionError())

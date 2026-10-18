@@ -18,6 +18,16 @@ export async function hasBlockBetween(firstId: bigint, secondId: bigint, databas
   return Boolean(block)
 }
 
+export async function lockAndCheckParticipantBlocks(transaction: Prisma.TransactionClient, userId: bigint, participantIds: bigint[]) {
+  const otherIds = [...new Set(participantIds.filter((id) => id !== userId))]
+    .sort((a, b) => a < b ? -1 : a > b ? 1 : 0)
+  for (const otherId of otherIds) {
+    await lockMessagingPair(transaction, userId, otherId)
+    if (await hasBlockBetween(userId, otherId, transaction)) return true
+  }
+  return false
+}
+
 export async function blockUser(blockerId: bigint, blockedId: bigint) {
   if (blockerId === blockedId) return { status: 'self_block' as const }
 

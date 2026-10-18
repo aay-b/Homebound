@@ -289,6 +289,11 @@ export function createSocketServer(httpServer: HttpServer) {
           return
         }
 
+        if (result.status === 'blocked') {
+          acknowledge?.({ ok: false, error: 'You cannot edit messages in this conversation.' })
+          return
+        }
+
         // Broadcast the persisted update so both open participants see the same edited content.
         const room = conversationRoom(BigInt(result.update.conversationId))
         socket.join(room)
@@ -316,6 +321,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
         if (result.status === 'not_sender') {
           acknowledge?.({ ok: false, error: 'Only the sender can delete this message.' })
+          return
+        }
+
+        if (result.status === 'blocked') {
+          acknowledge?.({ ok: false, error: 'You cannot delete messages in this conversation.' })
           return
         }
 
@@ -381,6 +391,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
         if (result.status === 'not_a_member') {
           acknowledge?.({ ok: false, error: 'User is not a conversation member.' })
+          return
+        }
+
+        if (result.status === 'blocked') {
+          acknowledge?.({ ok: false, error: 'You cannot react to messages in this conversation.' })
           return
         }
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/config/prisma.js'
-import { hasBlockBetween, lockMessagingPair } from '@/modules/messages/blocking.service.js'
+import { lockAndCheckParticipantBlocks } from '@/modules/messages/blocking.service.js'
 
 export type StoredMessage = {
   id: string
@@ -63,17 +63,20 @@ type ToggleMessageReactionResult =
   | { status: 'invalid_emoji' }
   | { status: 'message_not_found' }
   | { status: 'not_a_member' }
+  | { status: 'blocked' }
   | { status: 'updated'; update: MessageReactionUpdate }
 
 type EditMessageResult =
   | { status: 'empty_content' }
   | { status: 'message_not_found' }
   | { status: 'not_sender' }
+  | { status: 'blocked' }
   | { status: 'updated'; update: MessageUpdate }
 
 type DeleteMessageResult =
   | { status: 'message_not_found' }
   | { status: 'not_sender' }
+  | { status: 'blocked' }
   | { status: 'deleted'; deletion: MessageDeletion }
 
 function toStoredMessage(message: {
@@ -130,13 +133,7 @@ export async function createMessage(
     // A sender may write only to a conversation they belong to.
     if (!conversation.members.some((member) => member.userId === senderId)) return { status: 'not_a_member' }
 
-    const otherMembers = conversation.members
-      .filter((member) => member.userId !== senderId)
-      .sort((a, b) => a.userId < b.userId ? -1 : 1)
-    for (const member of otherMembers) {
-      await lockMessagingPair(transaction, senderId, member.userId)
-      if (await hasBlockBetween(senderId, member.userId, transaction)) return { status: 'blocked' }
-    }
+    if (await lockAndCheckParticipantBlocks(transaction, senderId, conversation.members.map((member) => member.userId))) return { status: 'blocked' }
 
     // Store normalized content so persisted messages never contain whitespace-only values.
     const message = await transaction.message.create({
@@ -171,53 +168,65 @@ export async function editMessage(
   const normalizedContent = content.trim()
   if (!normalizedContent) return { status: 'empty_content' }
 
-  const message = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, conversationId: true, senderId: true, deletedAt: true },
+  return prisma.$transaction(async (transaction) => {
+    const message = await transaction.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true, conversationId: true, senderId: true, deletedAt: true,
+        conversation: { select: { members: { select: { userId: true } } } },
+      },
+    })
+
+    if (!message || message.deletedAt) return { status: 'message_not_found' }
+    if (message.senderId !== senderId) return { status: 'not_sender' }
+    if (await lockAndCheckParticipantBlocks(transaction, senderId, message.conversation.members.map((member) => member.userId))) return { status: 'blocked' }
+
+    const updatedMessage = await transaction.message.update({
+      where: { id: messageId },
+      data: { content: normalizedContent, editedAt: new Date() },
+      select: { id: true, conversationId: true, content: true, editedAt: true },
+    })
+
+    return {
+      status: 'updated',
+      update: {
+        id: updatedMessage.id.toString(),
+        conversationId: updatedMessage.conversationId.toString(),
+        content: updatedMessage.content,
+        editedAt: updatedMessage.editedAt!.toISOString(),
+      },
+    }
   })
-
-  if (!message || message.deletedAt) return { status: 'message_not_found' }
-  if (message.senderId !== senderId) return { status: 'not_sender' }
-
-  const updatedMessage = await prisma.message.update({
-    where: { id: messageId },
-    data: { content: normalizedContent, editedAt: new Date() },
-    select: { id: true, conversationId: true, content: true, editedAt: true },
-  })
-
-  return {
-    status: 'updated',
-    update: {
-      id: updatedMessage.id.toString(),
-      conversationId: updatedMessage.conversationId.toString(),
-      content: updatedMessage.content,
-      editedAt: updatedMessage.editedAt!.toISOString(),
-    },
-  }
 }
 
 export async function deleteMessage(
   messageId: bigint,
   senderId: bigint,
 ): Promise<DeleteMessageResult> {
-  const message = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, conversationId: true, senderId: true },
+  return prisma.$transaction(async (transaction) => {
+    const message = await transaction.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true, conversationId: true, senderId: true,
+        conversation: { select: { members: { select: { userId: true } } } },
+      },
+    })
+
+    if (!message) return { status: 'message_not_found' }
+    if (message.senderId !== senderId) return { status: 'not_sender' }
+    if (await lockAndCheckParticipantBlocks(transaction, senderId, message.conversation.members.map((member) => member.userId))) return { status: 'blocked' }
+
+    // The MessageReactions foreign key cascades, so deleting the message also removes its reactions.
+    await transaction.message.delete({ where: { id: messageId } })
+
+    return {
+      status: 'deleted',
+      deletion: {
+        id: message.id.toString(),
+        conversationId: message.conversationId.toString(),
+      },
+    }
   })
-
-  if (!message) return { status: 'message_not_found' }
-  if (message.senderId !== senderId) return { status: 'not_sender' }
-
-  // The MessageReactions foreign key cascades, so deleting the message also removes its reactions.
-  await prisma.message.delete({ where: { id: messageId } })
-
-  return {
-    status: 'deleted',
-    deletion: {
-      id: message.id.toString(),
-      conversationId: message.conversationId.toString(),
-    },
-  }
 }
 
 export async function getConversationMessages(
@@ -260,28 +269,73 @@ export async function toggleMessageReaction(
 ): Promise<ToggleMessageReactionResult> {
   if (!allowedReactionEmojis.has(emoji)) return { status: 'invalid_emoji' }
 
-  const message = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, conversationId: true, deletedAt: true },
-  })
-  if (!message || message.deletedAt) return { status: 'message_not_found' }
-
-  // Reactions follow the same access rule as messages: only conversation members may change them.
-  const membership = await prisma.conversationMember.findUnique({
-    where: { conversationId_userId: { conversationId: message.conversationId, userId } },
-    select: { conversationId: true, user: { select: { name: true } } },
-  })
-  if (!membership) return { status: 'not_a_member' }
-
-  const existingReaction = await prisma.messageReaction.findFirst({
-    where: { messageId, userId },
-    select: { emoji: true },
-  })
-
-  if (existingReaction?.emoji === emoji) {
-    await prisma.messageReaction.delete({
-      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+  return prisma.$transaction(async (transaction) => {
+    const message = await transaction.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true,
+        conversationId: true,
+        deletedAt: true,
+        conversation: { select: { members: { select: { userId: true } } } },
+      },
     })
+    if (!message || message.deletedAt) return { status: 'message_not_found' }
+
+    // Reactions follow the same access rule as messages: only conversation members may change them.
+    const membership = await transaction.conversationMember.findUnique({
+      where: { conversationId_userId: { conversationId: message.conversationId, userId } },
+      select: { conversationId: true, user: { select: { name: true } } },
+    })
+    if (!membership) return { status: 'not_a_member' }
+
+    // Serialize all reaction changes with blocking, including removal and replacement.
+    if (await lockAndCheckParticipantBlocks(transaction, userId, message.conversation.members.map((member) => member.userId))) return { status: 'blocked' }
+
+    const existingReaction = await transaction.messageReaction.findFirst({
+      where: { messageId, userId },
+      select: { emoji: true },
+    })
+
+    if (existingReaction?.emoji === emoji) {
+      await transaction.messageReaction.delete({
+        where: { messageId_userId_emoji: { messageId, userId, emoji } },
+      })
+
+      return {
+        status: 'updated',
+        update: {
+          messageId: message.id.toString(),
+          conversationId: message.conversationId.toString(),
+          userId: userId.toString(),
+          userName: membership.user.name,
+          emoji,
+          action: 'removed',
+        },
+      }
+    }
+
+    if (existingReaction) {
+      // Choosing a different emoji replaces the member's previous reaction instead of adding a second one.
+      await transaction.messageReaction.update({
+        where: { messageId_userId_emoji: { messageId, userId, emoji: existingReaction.emoji } },
+        data: { emoji },
+      })
+
+      return {
+        status: 'updated',
+        update: {
+          messageId: message.id.toString(),
+          conversationId: message.conversationId.toString(),
+          userId: userId.toString(),
+          userName: membership.user.name,
+          emoji,
+          action: 'replaced',
+          previousEmoji: existingReaction.emoji,
+        },
+      }
+    }
+
+    await transaction.messageReaction.create({ data: { messageId, userId, emoji } })
 
     return {
       status: 'updated',
@@ -291,43 +345,8 @@ export async function toggleMessageReaction(
         userId: userId.toString(),
         userName: membership.user.name,
         emoji,
-        action: 'removed',
+        action: 'added',
       },
     }
-  }
-
-  if (existingReaction) {
-    // Choosing a different emoji replaces the member's previous reaction instead of adding a second one.
-    await prisma.messageReaction.update({
-      where: { messageId_userId_emoji: { messageId, userId, emoji: existingReaction.emoji } },
-      data: { emoji },
-    })
-
-    return {
-      status: 'updated',
-      update: {
-        messageId: message.id.toString(),
-        conversationId: message.conversationId.toString(),
-        userId: userId.toString(),
-        userName: membership.user.name,
-        emoji,
-        action: 'replaced',
-        previousEmoji: existingReaction.emoji,
-      },
-    }
-  }
-
-  await prisma.messageReaction.create({ data: { messageId, userId, emoji } })
-
-  return {
-    status: 'updated',
-    update: {
-      messageId: message.id.toString(),
-      conversationId: message.conversationId.toString(),
-      userId: userId.toString(),
-      userName: membership.user.name,
-      emoji,
-      action: 'added',
-    },
-  }
+  })
 }

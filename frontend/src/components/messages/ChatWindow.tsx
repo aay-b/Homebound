@@ -63,6 +63,10 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
     setSendError('')
     setIsActionsMenuOpen(false)
     setIsBlockDialogOpen(false)
+    setEditingMessageId(null)
+    setEditingContent('')
+    setEditError('')
+    setMessageIdPendingDeletion(null)
   }, [isParticipantBlocked])
 
   if (!conversation) {
@@ -96,13 +100,14 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   }
 
   function startEditing(message: Message) {
+    if (isParticipantBlocked) return
     setEditingMessageId(message.id)
     setEditingContent(message.content)
     setEditError('')
   }
 
   async function saveEditing() {
-    if (!editingMessageId || !editingContent.trim() || isEditingRef.current) return
+    if (!editingMessageId || !editingContent.trim() || isEditingRef.current || isParticipantBlocked) return
 
     // Block repeated Enter presses before React state can disable the Save button.
     isEditingRef.current = true
@@ -170,7 +175,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       <div ref={messagesContainerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 pb-6 pt-10 sm:px-7">
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
-          const isEditing = editingMessageId === message.id
+          const isEditing = !isParticipantBlocked && editingMessageId === message.id
           return (
             <div key={message.id} className={`flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
               {!isOwnMessage && <div className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FABF6B]/40 text-[10px] font-bold text-[#344336]">{conversation.participantInitials}</div>}
@@ -192,16 +197,18 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                     </>
                   )}
                   {/* The transparent bridge preserves hover while the pointer crosses the visual gap. */}
+                  {!isParticipantBlocked && (
                   <div className={`absolute bottom-full z-10 mb-2 w-max gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg after:absolute after:-bottom-2 after:left-0 after:h-2 after:w-full after:content-[''] ${isOwnMessage ? 'right-0' : 'left-0'} ${dismissedReactionPickerId === message.id ? 'hidden' : 'hidden group-hover/message:flex'}`} aria-label="Choose a reaction">
                     {reactionOptions.map((emoji) => {
                       const isSelected = message.reactions.some((reaction) => reaction.emoji === emoji && reaction.reactedByCurrentUser)
                       return <button key={emoji} type="button" aria-pressed={isSelected} onClick={() => { onToggleReaction(message.id, emoji); setDismissedReactionPickerId(message.id) }} className={`grid h-7 w-7 place-items-center rounded-lg text-sm transition hover:bg-[#FABF6B]/25 ${isSelected ? 'bg-[#FABF6B]/45 ring-1 ring-[#D7885C]' : ''}`}>{emoji}</button>
                     })}
                   </div>
+                  )}
                 </div>
                 <div className={`mt-1 flex items-center gap-2 text-[11px] text-slate-400 ${isOwnMessage ? 'justify-end' : ''}`}>
                   {message.edited && <span className="group-hover/action:hidden">Edited</span>}
-                  {isOwnMessage && !isEditing && (
+                  {isOwnMessage && !isEditing && !isParticipantBlocked && (
                     <span className="hidden gap-2 group-hover/action:flex">
                       <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>
                         <button onClick={() => setMessageIdPendingDeletion(message.id)} className="hover:text-[#D7885C]">Delete</button>
@@ -240,7 +247,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
       </form>
       )}
 
-      {messageIdPendingDeletion && (
+      {messageIdPendingDeletion && !isParticipantBlocked && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#344336]/45 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-message-title">
           <div className="w-full max-w-sm rounded-2xl bg-[#fffdf9] p-6 shadow-xl">
             <h3 id="delete-message-title" className="text-lg font-bold text-[#344336]">Delete message?</h3>

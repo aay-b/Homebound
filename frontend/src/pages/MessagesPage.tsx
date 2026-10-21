@@ -8,7 +8,7 @@ import { MessagingAvatarProvider } from '@/components/messages/UserAvatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { getConversations, type ConversationPreview } from '@/services/conversations'
 import { cancelOutgoingMessageRequest, getIncomingMessageRequests, getOutgoingMessageRequests, respondToMessageRequest, type IncomingMessageRequest, type OutgoingMessageRequest } from '@/services/messageRequests'
-import { getConversationMessages, type StoredMessage } from '@/services/messages'
+import { getConversationMessages, uploadConversationImage, type StoredMessage } from '@/services/messages'
 import { connectMessagingSocket } from '@/services/socket'
 import { getCurrentMessagingUser, type CurrentMessagingUser } from '@/services/users'
 import type { BlockedUser, Conversation, Message, MessageRequest } from '@/types/messages'
@@ -57,6 +57,7 @@ function toMessage(storedMessage: StoredMessage): Message {
     id: storedMessage.id,
     senderId: storedMessage.senderId,
     content: storedMessage.content,
+    imagePath: storedMessage.imagePath ?? null,
     createdAt: storedMessage.createdAt,
     sentAt: formatMessageTime(storedMessage.createdAt),
     edited: Boolean(storedMessage.editedAt),
@@ -81,7 +82,7 @@ function mergeConversationMessages(conversation: Conversation, incomingMessages:
   return {
     ...conversation,
     messages,
-    lastMessage: latestMessage?.content ?? '',
+    lastMessage: latestMessage?.imagePath ? 'Image' : latestMessage?.content ?? '',
     lastMessageTime: latestMessage?.sentAt ?? '',
   }
 }
@@ -241,7 +242,7 @@ function applyMessageDeletion(conversation: Conversation, deletion: MessageDelet
   return {
     ...conversation,
     messages,
-    lastMessage: latestMessage?.content ?? '',
+    lastMessage: latestMessage?.imagePath ? 'Image' : latestMessage?.content ?? '',
     lastMessageTime: latestMessage?.sentAt ?? '',
   }
 }
@@ -258,7 +259,7 @@ function toConversationFromParticipants(
 
 export function MessagesPage() {
   const { user, loading: isAuthLoading } = useAuth()
-  const [messagingUser, setMessagingUser] = useState<CurrentMessagingUser | null>(null)
+  const [messagingUser, setMessagingUser] = useState<(CurrentMessagingUser & { authUserId: string }) | null>(null)
   const [messagingUserError, setMessagingUserError] = useState<string | null>(null)
   const [conversations, setConversations] = useState(initialConversations)
   const [messageRequests, setMessageRequests] = useState(initialRequests)
@@ -274,13 +275,14 @@ export function MessagesPage() {
   const historyRequestsRef = useRef(new Map<string, HistoryRequest>())
   const historyLoadedAtRef = useRef(new Map<string, number>())
   const historyGenerationRef = useRef(0)
+  const imageUploadsRef = useRef(new WeakMap<File, { accountId: string; conversationId: string; imagePath: string }>())
   const blockedParticipantIdsRef = useRef(new Set<string>())
   const blockVersionRef = useRef(0)
   const blockChangesRef = useRef(new Map<string, { version: number; isBlocked: boolean }>())
   const blockedListRequestRef = useRef(0)
   const activeConversationIdRef = useRef<string | null>(null)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
-  const currentUserId = messagingUser?.id
+  const currentUserId = messagingUser?.authUserId === user?.id ? messagingUser?.id : undefined
   const recentConversationIds = conversations.slice(0, 3).map((conversation) => conversation.id).join(',')
 
   useEffect(() => {
@@ -294,7 +296,7 @@ export function MessagesPage() {
     setMessagingUserError(null)
     getCurrentMessagingUser()
       .then((resolvedUser) => {
-        if (isCurrentUser) setMessagingUser(resolvedUser)
+        if (isCurrentUser) setMessagingUser({ ...resolvedUser, authUserId: user.id })
       })
       .catch((error: unknown) => {
         if (isCurrentUser) setMessagingUserError(error instanceof Error ? error.message : 'Unable to load messaging account.')
@@ -312,6 +314,7 @@ export function MessagesPage() {
     const socket = connectMessagingSocket(currentUserId)
     socketRef.current = socket
     historyGenerationRef.current += 1
+    imageUploadsRef.current = new WeakMap()
     historyLoadedAtRef.current.clear()
     setHistoryStatus({ conversationId: null, loading: false, error: '' })
     blockedParticipantIdsRef.current = new Set()
@@ -690,19 +693,64 @@ export function MessagesPage() {
 
   function sendMessage(content: string) {
     if (activeConversation?.isBlocked) return Promise.resolve({ ok: false, error: 'You cannot send messages to this person.' })
+    if (!activeConversationId) return Promise.resolve({ ok: false, error: 'Select a conversation first.' })
+    return sendConversationMessage(activeConversationId, content)
+  }
+
+  async function sendImage(file: File, signal: AbortSignal): Promise<{ ok: boolean; error?: string }> {
+    const conversation = activeConversation
     const socket = socketRef.current
-    if (!activeConversationId || !socket || !socket.connected) {
+    const generation = historyGenerationRef.current
+    const uploads = imageUploadsRef.current
+    if (!conversation || !currentUserId || !socket?.connected) return { ok: false, error: getConnectionError() }
+    if (conversation.isBlocked) return { ok: false, error: 'You cannot send messages to this person.' }
+
+    try {
+      signal.throwIfAborted()
+      const cached = uploads.get(file)
+      const imagePath = cached?.accountId === currentUserId && cached.conversationId === conversation.id
+        ? cached.imagePath
+        : await uploadConversationImage(conversation.id, file, signal)
+      signal.throwIfAborted()
+      // Navigating away or switching accounts must not send a late upload to the wrong thread.
+      if (generation !== historyGenerationRef.current || activeConversationIdRef.current !== conversation.id || socketRef.current !== socket) {
+        return { ok: false, error: 'The conversation changed. Please select the image again.' }
+      }
+      uploads.set(file, { accountId: currentUserId, conversationId: conversation.id, imagePath })
+      if (blockedParticipantIdsRef.current.has(conversation.participantId)) {
+        return { ok: false, error: 'You cannot send messages to this person.' }
+      }
+      // Reuse a completed upload on retry rather than creating duplicate image messages after a lost acknowledgement.
+      if (conversation.messages.some((message) => message.imagePath === imagePath && message.senderId === currentUserId)) {
+        uploads.delete(file)
+        return { ok: true }
+      }
+      const result = await sendConversationMessage(conversation.id, '', imagePath)
+      if (result.ok) uploads.delete(file)
+      return result
+    } catch (error) {
+      return { ok: false, error: signal.aborted ? 'Image sending was cancelled.' : error instanceof Error ? error.message : 'Unable to send the image. Please try again.' }
+    }
+  }
+
+  function sendConversationMessage(conversationId: string, content: string, imagePath?: string) {
+    const socket = socketRef.current
+    if (!socket || !socket.connected) {
       return Promise.resolve({ ok: false, error: getConnectionError() })
     }
 
-    const conversationId = activeConversationId
+    const generation = historyGenerationRef.current
 
     return new Promise<{ ok: boolean; error?: string }>((resolve) => {
       // A timeout prevents the input from waiting forever when the server is unreachable.
-      socket.timeout(5000).emit(
+      socket.timeout(imagePath ? 15_000 : 5000).emit(
         'send_message',
-        { conversationId, content },
+        { conversationId, content, ...(imagePath ? { imagePath } : {}) },
         (timeoutError: Error | null, response?: { ok: boolean; error?: string; message?: StoredMessage }) => {
+          if (generation !== historyGenerationRef.current || socketRef.current !== socket) {
+            resolve({ ok: false, error: 'The messaging session changed. Please try again.' })
+            return
+          }
           if (timeoutError) {
             resolve({ ok: false, error: getConnectionError() })
             return
@@ -897,7 +945,7 @@ export function MessagesPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-8 lg:px-12 lg:py-6">
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-[#757A5E]/25 bg-white shadow-[0_20px_60px_-25px_rgba(52,67,54,0.28)] lg:flex-row">
           <ConversationSidebar currentUserId={currentUserId} conversations={conversations} activeConversationId={activeConversationId} messageRequests={messageRequests} outgoingMessageRequests={outgoingMessageRequests} resolvedOutgoingRequest={resolvedOutgoingRequest} onConversationSelect={setActiveConversationId} onConversationPrefetch={prefetchConversation} onRequestAction={handleRequestAction} onCancelOutgoingRequest={handleCancelOutgoingRequest} onOutgoingRequestCreated={handleOutgoingRequestCreated} onConversationDelete={deleteConversation} onOpenBlockedUsers={() => { setIsBlockedUsersOpen(true); loadBlockedUsers() }} />
-          <ChatWindow conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} isHistoryLoading={historyStatus.conversationId === activeConversationId ? historyStatus.loading : !historyLoadedAtRef.current.has(activeConversationId ?? '')} historyError={historyStatus.conversationId === activeConversationId ? historyStatus.error : ''} onRetryHistory={retryConversationHistory} />
+          <ChatWindow key={`${currentUserId}:${activeConversationId ?? 'empty'}`} conversation={activeConversation} currentUserId={currentUserId} onSendMessage={sendMessage} onSendImage={sendImage} onEditMessage={editMessage} onDeleteMessage={deleteMessage} onToggleReaction={toggleReaction} onBlockParticipant={blockParticipant} isHistoryLoading={historyStatus.conversationId === activeConversationId ? historyStatus.loading : !historyLoadedAtRef.current.has(activeConversationId ?? '')} historyError={historyStatus.conversationId === activeConversationId ? historyStatus.error : ''} onRetryHistory={retryConversationHistory} />
         </div>
       </div>
       {isBlockedUsersOpen && <BlockedUsersDialog key={currentUserId} users={blockedUsers} isLoading={isBlockedUsersLoading} error={blockedUsersError} onClose={() => setIsBlockedUsersOpen(false)} onRefresh={loadBlockedUsers} onUnblock={unblockParticipant} />}

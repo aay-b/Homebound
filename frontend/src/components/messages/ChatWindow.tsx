@@ -1,5 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { BlockParticipantDialog } from '@/components/messages/BlockParticipantDialog'
+import { ImageAttachmentPreview } from '@/components/messages/ImageAttachmentPreview'
+import { MessageImage } from '@/components/messages/MessageImage'
 import { UserAvatar } from '@/components/messages/UserAvatar'
 import type { Conversation, Message } from '@/types/messages'
 import { formatMessageTime } from '@/utils/messageTime'
@@ -18,6 +20,7 @@ type ChatWindowProps = {
   conversation?: Conversation
   currentUserId: string
   onSendMessage: (content: string) => Promise<SendMessageResult>
+  onSendImage: (file: File, signal: AbortSignal) => Promise<SendMessageResult>
   onEditMessage: (messageId: string, content: string) => Promise<EditMessageResult>
   onDeleteMessage: (messageId: string) => void
   onToggleReaction: (messageId: string, emoji: string) => void
@@ -30,8 +33,9 @@ type ChatWindowProps = {
 // These are the six reaction options available in the current messaging UI.
 const reactionOptions = ['👍', '❤️', '😂', '😮', '😢', '😡']
 
-export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditMessage, onDeleteMessage, onToggleReaction, onBlockParticipant, isHistoryLoading, historyError, onRetryHistory }: ChatWindowProps) {
+export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendImage, onEditMessage, onDeleteMessage, onToggleReaction, onBlockParticipant, isHistoryLoading, historyError, onRetryHistory }: ChatWindowProps) {
   const [draft, setDraft] = useState('')
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [editError, setEditError] = useState('')
@@ -50,6 +54,10 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
   const scrollStateRef = useRef<{ conversationId?: string; messageCount: number }>({ messageCount: 0 })
   const isSendingRef = useRef(false)
   const isEditingRef = useRef(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const imageUploadControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => imageUploadControllerRef.current?.abort(), [])
 
   useLayoutEffect(() => {
     // Open at the latest message before painting; animate only subsequent live messages.
@@ -57,7 +65,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
     const isOpening = scrollStateRef.current.conversationId !== conversation?.id || scrollStateRef.current.messageCount === 0
     messagesContainer?.scrollTo({ top: messagesContainer.scrollHeight, behavior: isOpening ? 'auto' : 'smooth' })
     scrollStateRef.current = { conversationId: conversation?.id, messageCount: conversation?.messages.length ?? 0 }
-  }, [conversation?.id, conversation?.messages.length])
+  }, [conversation?.id, conversation?.messages.length, selectedImage])
 
   useEffect(() => {
     setIsActionsMenuOpen(false)
@@ -67,6 +75,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
 
   useEffect(() => {
     if (!isParticipantBlocked) return
+    imageUploadControllerRef.current?.abort()
+    setSelectedImage(null)
     setDraft('')
     setSendError('')
     setIsActionsMenuOpen(false)
@@ -83,6 +93,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (selectedImage) { await submitImage(); return }
     // Send remains clickable by design; blank drafts simply do not create a message.
     if (!draft.trim() || isSendingRef.current || isParticipantBlocked) return
 
@@ -107,8 +118,44 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
     }
   }
 
+  function chooseImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || isSendingRef.current || isParticipantBlocked) return
+    if (!file.type.toLowerCase().startsWith('image/') || file.size === 0) {
+      setSendError('Please select a valid image.')
+      return
+    }
+    setSelectedImage(file)
+    setSendError('')
+  }
+
+  async function submitImage() {
+    if (!selectedImage || isSendingRef.current || isParticipantBlocked) return
+    const controller = new AbortController()
+    imageUploadControllerRef.current = controller
+    isSendingRef.current = true
+    setIsSending(true)
+    setSendError('')
+    try {
+      const result = await onSendImage(selectedImage, controller.signal)
+      if (controller.signal.aborted) return
+      if (result.ok) setSelectedImage(null)
+      else setSendError(result.error ?? 'Image was not sent. Please try again.')
+      // Keep any text draft untouched: an image is a separate message, not a caption.
+    } catch {
+      if (!controller.signal.aborted) setSendError('Image was not sent. Please try again.')
+    } finally {
+      if (imageUploadControllerRef.current === controller) {
+        imageUploadControllerRef.current = null
+        isSendingRef.current = false
+        setIsSending(false)
+      }
+    }
+  }
+
   function startEditing(message: Message) {
-    if (isParticipantBlocked) return
+    if (isParticipantBlocked || message.imagePath) return
     setEditingMessageId(message.id)
     setEditingContent(message.content)
     setEditError('')
@@ -197,12 +244,12 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         )}
         {conversation.messages.map((message) => {
           const isOwnMessage = message.senderId === currentUserId
-          const isEditing = !isParticipantBlocked && editingMessageId === message.id
+          const isEditing = !isParticipantBlocked && !message.imagePath && editingMessageId === message.id
           return (
             <div key={message.id} className={`flex gap-2.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
               {!isOwnMessage && <UserAvatar userId={conversation.participantId} name={conversation.participantName} className="mt-1 h-8 w-8" />}
               <div className={`group/action relative w-fit min-w-0 max-w-[78%] sm:max-w-[360px] ${message.reactions.length > 0 ? 'pb-7' : ''} ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl px-4 py-3 shadow-sm ${isOwnMessage ? 'rounded-br-md bg-[#757A5E] text-white' : 'rounded-bl-md bg-white text-[#344336] ring-1 ring-[#757A5E]/15'}`}>
+                <div onMouseLeave={() => setDismissedReactionPickerId(null)} className={`group/message relative w-fit max-w-full rounded-2xl ${message.imagePath ? 'p-2' : 'px-4 py-3'} shadow-sm ${isOwnMessage ? 'rounded-br-md bg-[#757A5E] text-white' : 'rounded-bl-md bg-white text-[#344336] ring-1 ring-[#757A5E]/15'}`}>
                   {isEditing ? (
                     <div className="min-w-[220px]">
                       <input value={editingContent} onChange={(event) => setEditingContent(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveEditing(); if (event.key === 'Escape') setEditingMessageId(null) }} autoFocus disabled={isEditingMessage} className="w-full rounded bg-white/20 px-2 py-1 text-sm outline-none ring-1 ring-white/50 disabled:opacity-60" />
@@ -214,7 +261,11 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                     </div>
                   ) : (
                     <>
-                      <p className="break-words [overflow-wrap:anywhere] text-sm leading-6">{message.content}</p>
+                      {message.imagePath ? (
+                        <MessageImage conversationId={conversation.id} messageId={message.id} currentUserId={currentUserId} />
+                      ) : (
+                        <p className="break-words [overflow-wrap:anywhere] text-sm leading-6">{message.content}</p>
+                      )}
                       <time dateTime={message.createdAt} className={`mt-1 block text-[10px] ${isOwnMessage ? 'text-right text-white/65' : 'text-left text-slate-400'}`}>{formatMessageTime(message.createdAt)}</time>
                     </>
                   )}
@@ -232,7 +283,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
                   {message.edited && <span className="group-hover/action:hidden">Edited</span>}
                   {isOwnMessage && !isEditing && !isParticipantBlocked && (
                     <span className="hidden gap-2 group-hover/action:flex">
-                      <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>
+                      {!message.imagePath && <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>}
                         <button onClick={() => setMessageIdPendingDeletion(message.id)} className="hover:text-[#D7885C]">Delete</button>
                     </span>
                   )}
@@ -261,9 +312,16 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onEditM
         </div>
       ) : (
       <form onSubmit={handleSubmit} className="shrink-0 border-t border-[#757A5E]/15 bg-white p-4 sm:px-7 sm:py-5">
+        {selectedImage && <ImageAttachmentPreview file={selectedImage} disabled={isSending} onRemove={() => { setSelectedImage(null); setSendError('') }} />}
+        <input ref={imageInputRef} type="file" accept="image/*" onChange={chooseImage} disabled={isSending} aria-label="Choose an image to send" className="hidden" />
         <div className="flex items-end gap-3">
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} readOnly={isSending} rows={1} className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-[#757A5E]/25 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#757A5E] focus:ring-4 focus:ring-[#FABF6B]/20" placeholder="Write a message..." />
-          <button type="submit" disabled={isSending} className="h-11 rounded-xl bg-[#757A5E] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#344336] disabled:cursor-not-allowed disabled:bg-[#757A5E]/60">{isSending ? 'Sending...' : 'Send'}</button>
+          <button type="button" onClick={() => imageInputRef.current?.click()} disabled={isSending} aria-label="Choose image" title="Choose image" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[#757A5E] transition hover:bg-[#FABF6B]/20 disabled:cursor-not-allowed disabled:opacity-50">
+            <svg aria-hidden="true" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8" cy="8" r="1.5" /><path d="m3 17 5-5 4 4 3-3 6 6" /></svg>
+          </button>
+          {selectedImage ? <div role="status" className="flex min-h-11 min-w-0 flex-1 items-center px-1 text-sm text-slate-500">{isSending ? 'Sending image...' : 'Ready to send image'}</div> : (
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} readOnly={isSending} rows={1} className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-[#757A5E]/25 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#757A5E] focus:ring-4 focus:ring-[#FABF6B]/20" placeholder="Write a message..." />
+          )}
+          <button type="submit" disabled={isSending} className="h-11 shrink-0 rounded-xl bg-[#757A5E] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#344336] disabled:cursor-not-allowed disabled:bg-[#757A5E]/60">{isSending ? 'Sending...' : selectedImage ? 'Send image' : 'Send'}</button>
         </div>
         {sendError && <p className="mt-2 text-xs text-rose-600" role="alert">{sendError}</p>}
       </form>

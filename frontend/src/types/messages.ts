@@ -18,6 +18,7 @@ export type Message = {
   id: string
   senderId: string
   content: string
+  imagePath: string | null
   createdAt: string
   sentAt: string
   edited?: boolean

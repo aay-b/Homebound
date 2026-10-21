@@ -20,6 +20,7 @@ export type ConversationDeletion = {
 type DeleteConversationResult =
   | { status: 'not_found' }
   | { status: 'not_a_member' }
+  | { status: 'storage_unavailable' }
   | { status: 'deleted'; deletion: ConversationDeletion }
 
 export async function getConversations(currentUserId: bigint, searchQuery = ''): Promise<ConversationsResult> {
@@ -80,19 +81,27 @@ export async function deleteConversation(
   conversationId: bigint,
   currentUserId: bigint,
 ): Promise<DeleteConversationResult> {
-  let imagePaths: string[] = []
-  const result = await prisma.$transaction<DeleteConversationResult>(async (transaction) => {
+  return prisma.$transaction<DeleteConversationResult>(async (transaction) => {
     const conversation = await transaction.conversation.findUnique({
       where: { id: conversationId },
       select: {
         id: true,
         members: { select: { userId: true } },
-        messages: { where: { imagePath: { not: null } }, select: { imagePath: true } },
       },
     })
 
     if (!conversation) return { status: 'not_found' }
     if (!conversation.members.some((member) => member.userId === currentUserId)) return { status: 'not_a_member' }
+
+    // Lock the parent before collecting paths so a new message cannot escape this deletion's image list.
+    const locked = await transaction.$queryRaw<Array<{ id: bigint }>>`SELECT id FROM public."Conversations" WHERE id = ${conversationId} FOR UPDATE`
+    if (!locked.length) return { status: 'not_found' }
+    const images = await transaction.message.findMany({
+      where: { conversationId, imagePath: { not: null } },
+      select: { imagePath: true },
+    })
+    const imagePaths = images.flatMap((message) => message.imagePath ? [message.imagePath] : [])
+    if (!await removeMessageImages(imagePaths)) return { status: 'storage_unavailable' }
 
     const participantIds = conversation.members.map((member) => member.userId)
 
@@ -106,7 +115,6 @@ export async function deleteConversation(
 
     // Database foreign keys cascade from the conversation to members, messages, and message reactions.
     await transaction.conversation.delete({ where: { id: conversationId } })
-    imagePaths = conversation.messages.flatMap((message) => message.imagePath ? [message.imagePath] : [])
 
     return {
       status: 'deleted',
@@ -115,7 +123,5 @@ export async function deleteConversation(
         participantIds: participantIds.map((participantId) => participantId.toString()),
       },
     }
-  })
-  if (result.status === 'deleted') await removeMessageImages(imagePaths)
-  return result
+  }, { timeout: 20_000 })
 }

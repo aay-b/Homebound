@@ -22,7 +22,6 @@ export function ImageAttachmentPreview({ file, disabled, onRemove }: { file: Fil
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[#344336]" title={file.name}>{file.name}</p>
-        <p className="mt-1 text-xs text-slate-500">This image will be sent as a separate message.</p>
         {url && failedUrl === url && <p className="mt-1 text-xs text-slate-500">Preview is not available for this image format.</p>}
       </div>
       <button type="button" onClick={onRemove} disabled={disabled} aria-label="Remove selected image" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[#344336] transition hover:bg-[#757A5E]/15 disabled:opacity-50">

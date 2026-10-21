@@ -1,7 +1,7 @@
 import { prisma } from '@/config/prisma.js'
 import { Prisma } from '@/generated/prisma/client.js'
 import { lockAndCheckParticipantBlocks } from '@/modules/messages/blocking.service.js'
-import { removeMessageImages, validateMessageImage } from '@/modules/messages/message-images.service.js'
+import { getMessageImageLinks, removeMessageImages, validateMessageImage, type MessageImageSource } from '@/modules/messages/message-images.service.js'
 
 export type StoredMessage = {
   id: string
@@ -9,6 +9,7 @@ export type StoredMessage = {
   senderId: string
   content: string
   imagePath: string | null
+  image: MessageImageSource | null
   createdAt: string
   editedAt: string | null
   reactions: StoredReaction[]
@@ -85,6 +86,7 @@ type DeleteMessageResult =
   | { status: 'message_not_found' }
   | { status: 'not_sender' }
   | { status: 'blocked' }
+  | { status: 'storage_unavailable' }
   | { status: 'deleted'; deletion: MessageDeletion }
 
 function toStoredMessage(message: {
@@ -118,6 +120,7 @@ function toStoredMessage(message: {
     senderId: message.senderId.toString(),
     content: message.content,
     imagePath: message.imagePath,
+    image: null,
     createdAt: message.createdAt.toISOString(),
     editedAt: message.editedAt?.toISOString() ?? null,
     reactions: [...reactionsByEmoji.values()],
@@ -147,7 +150,7 @@ export async function createMessage(
   }
 
   try {
-    return await prisma.$transaction(async (transaction) => {
+    const result = await prisma.$transaction<CreateMessageResult>(async (transaction) => {
       const conversation = await transaction.conversation.findUnique({
         where: { id: conversationId },
         select: { id: true, members: { select: { userId: true } } },
@@ -183,6 +186,12 @@ export async function createMessage(
         message: toStoredMessage(message),
       }
     })
+    // Sign only after commit, outside the transaction and pair lock; receivers can display the image directly.
+    if (result.status === 'created' && result.message.imagePath) {
+      const images = await getMessageImageLinks([{ imagePath: result.message.imagePath, conversationId, senderId }])
+      result.message.image = images.get(result.message.imagePath) ?? null
+    }
+    return result
   } catch (error) {
     if (imagePath && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
       && Array.isArray(error.meta?.target) && error.meta.target.includes('image_path')) {
@@ -237,8 +246,7 @@ export async function deleteMessage(
   messageId: bigint,
   senderId: bigint,
 ): Promise<DeleteMessageResult> {
-  let imagePath: string | null = null
-  const result = await prisma.$transaction<DeleteMessageResult>(async (transaction) => {
+  return prisma.$transaction<DeleteMessageResult>(async (transaction) => {
     const message = await transaction.message.findUnique({
       where: { id: messageId },
       select: {
@@ -251,9 +259,12 @@ export async function deleteMessage(
     if (message.senderId !== senderId) return { status: 'not_sender' }
     if (await lockAndCheckParticipantBlocks(transaction, senderId, message.conversation.members.map((member) => member.userId))) return { status: 'blocked' }
 
+    // Remove the file before its database reference. A Storage error leaves a retryable message.
+    if (message.imagePath && !await removeMessageImages([message.imagePath])) return { status: 'storage_unavailable' }
+
     // The MessageReactions foreign key cascades, so deleting the message also removes its reactions.
-    await transaction.message.delete({ where: { id: messageId } })
-    imagePath = message.imagePath
+    // deleteMany also makes a repeated delete safe if another open client just removed this row.
+    await transaction.message.deleteMany({ where: { id: messageId, senderId } })
 
     return {
       status: 'deleted',
@@ -262,9 +273,7 @@ export async function deleteMessage(
         conversationId: message.conversationId.toString(),
       },
     }
-  })
-  if (result.status === 'deleted' && imagePath) await removeMessageImages([imagePath])
-  return result
+  }, { timeout: 20_000 })
 }
 
 export async function getConversationMessages(
@@ -294,7 +303,15 @@ export async function getConversationMessages(
     },
   })
 
-  return { status: 'success', messages: messages.map((message) => toStoredMessage(message, currentUserId)) }
+  // Warm the latest image previews in one Storage call. Older offscreen images can load on demand.
+  const images = await getMessageImageLinks(messages.filter((message) => message.imagePath).slice(-20))
+  return {
+    status: 'success',
+    messages: messages.map((message) => ({
+      ...toStoredMessage(message, currentUserId),
+      image: message.imagePath ? images.get(message.imagePath) ?? null : null,
+    })),
+  }
 }
 
 export async function toggleMessageReaction(

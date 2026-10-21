@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
+import { getSupabaseEnv } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
 import { supabase } from '@/config/supabase.js'
 import { hasBlockBetween } from '@/modules/messages/blocking.service.js'
@@ -7,6 +9,54 @@ const bucket = 'message-images'
 const imagePathPattern = /^[1-9]\d*\/[1-9]\d*\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const imageContentTypePattern = /^image\/[a-z0-9][a-z0-9.+-]*$/i
 const imageUrlLifetimeSeconds = 60 * 60
+export type MessageImageSource = { url: string; expiresAt: string }
+const imageUrlCache = new Map<string, MessageImageSource>()
+const { supabaseUrl, supabaseSecretKey } = getSupabaseEnv()
+// Bound Storage deletion requests so a stalled service cannot hold database locks indefinitely.
+const deletionStorage = createClient(supabaseUrl, supabaseSecretKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: {
+    fetch: (input, options) => fetch(input, {
+      ...options,
+      signal: options?.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(5000)])
+        : AbortSignal.timeout(5000),
+    }),
+  },
+}).storage
+
+// Call only after the caller's conversation membership has been established.
+export async function getMessageImageLinks(messages: Array<{ imagePath: string | null; conversationId: bigint; senderId: bigint }>) {
+  const paths = [...new Set(messages.flatMap((message) => message.imagePath
+    && isMessageImagePath(message.imagePath, message.conversationId, message.senderId) ? [message.imagePath] : []))]
+  const images = new Map<string, MessageImageSource>()
+  const missing: string[] = []
+  for (const path of paths) {
+    const cached = imageUrlCache.get(path)
+    if (cached && Date.parse(cached.expiresAt) > Date.now() + 60_000) images.set(path, cached)
+    else missing.push(path)
+  }
+  if (!missing.length) return images
+
+  try {
+    // Batch signing avoids an extra authenticated HTTP request and database lookup per thumbnail.
+    const expiresAt = new Date(Date.now() + imageUrlLifetimeSeconds * 1000).toISOString()
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrls(missing, imageUrlLifetimeSeconds)
+    if (error || !data) return images
+    for (const item of data) {
+      if (!item.error && item.path && item.signedUrl) {
+        const image = { url: item.signedUrl, expiresAt }
+        images.set(item.path, image)
+        if (imageUrlCache.size >= 200) imageUrlCache.delete(imageUrlCache.keys().next().value!)
+        imageUrlCache.set(item.path, image)
+      }
+    }
+  } catch {
+    // Persisted messages must still be delivered if preview signing temporarily fails.
+    console.error('Unable to prepare message image previews.')
+  }
+  return images
+}
 
 export function isImageContentType(contentType: string) {
   return imageContentTypePattern.test(contentType)
@@ -81,21 +131,28 @@ export async function getMessageImageUrl(conversationId: bigint, messageId: bigi
   }
 
   // Historical images remain readable when blocked, just like historical text messages.
-  const expiresAt = new Date(Date.now() + imageUrlLifetimeSeconds * 1000).toISOString()
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(message.imagePath, imageUrlLifetimeSeconds)
-  if (error || !data) return { status: 'storage_unavailable' as const }
-  return { status: 'success' as const, image: { url: data.signedUrl, expiresAt } }
+  const images = await getMessageImageLinks([{ ...message, conversationId }])
+  const image = images.get(message.imagePath)
+  if (!image) return { status: 'storage_unavailable' as const }
+  return { status: 'success' as const, image }
 }
 
-export async function removeMessageImages(imagePaths: string[]) {
-  const paths = [...new Set(imagePaths.filter((path) => imagePathPattern.test(path)))]
-  // Best-effort cleanup happens after the database commit and never reverses a completed deletion.
+export async function removeMessageImages(imagePaths: string[]): Promise<boolean> {
+  // Never expand deletion beyond exact object paths produced by the messaging upload endpoint.
+  if (imagePaths.some((path) => !imagePathPattern.test(path))) return false
+  const paths = [...new Set(imagePaths)]
+  paths.forEach((path) => imageUrlCache.delete(path))
   try {
     for (let index = 0; index < paths.length; index += 100) {
-      const { error } = await supabase.storage.from(bucket).remove(paths.slice(index, index + 100))
-      if (error) console.error('Unable to remove deleted message images from Storage.')
+      const { error } = await deletionStorage.from(bucket).remove(paths.slice(index, index + 100))
+      if (error) {
+        console.error('Unable to remove message images from Storage.')
+        return false
+      }
     }
+    return true
   } catch {
-    console.error('Unable to remove deleted message images from Storage.')
+    console.error('Unable to remove message images from Storage.')
+    return false
   }
 }

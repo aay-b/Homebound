@@ -58,6 +58,7 @@ function toMessage(storedMessage: StoredMessage): Message {
     senderId: storedMessage.senderId,
     content: storedMessage.content,
     imagePath: storedMessage.imagePath ?? null,
+    image: storedMessage.image ?? null,
     createdAt: storedMessage.createdAt,
     sentAt: formatMessageTime(storedMessage.createdAt),
     edited: Boolean(storedMessage.editedAt),
@@ -805,24 +806,32 @@ export function MessagesPage() {
   }
 
   function deleteMessage(messageId: string) {
-    if (activeConversation?.isBlocked) return
+    if (activeConversation?.isBlocked) return Promise.resolve({ ok: false, error: 'You cannot delete messages in this conversation.' })
     const socket = socketRef.current
     if (!socket || !socket.connected) {
-      console.error(getConnectionError())
-      return
+      return Promise.resolve({ ok: false, error: getConnectionError() })
     }
 
-    socket.timeout(5000).emit(
-      'delete_message',
-      { messageId },
-      (timeoutError: Error | null, response?: { ok: boolean; error?: string; deletion?: MessageDeletion }) => {
-        if (timeoutError || !response?.ok || !response.deletion) {
-          console.error(response?.error ?? 'Unable to delete the message.')
-        }
+    const generation = historyGenerationRef.current
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      socket.timeout(30_000).emit(
+        'delete_message',
+        { messageId },
+        (timeoutError: Error | null, response?: { ok: boolean; error?: string; deletion?: MessageDeletion }) => {
+          if (generation !== historyGenerationRef.current || socketRef.current !== socket) {
+            resolve({ ok: false, error: 'The messaging session changed. Please try again.' })
+            return
+          }
+          if (timeoutError || !response?.ok || !response.deletion) {
+            resolve({ ok: false, error: response?.error ?? 'Unable to finish deleting the message. Please try again.' })
+            return
+          }
 
-        // The room event removes the message for both participants, including the sender.
-      },
-    )
+          // Only a confirmed deletion removes the message for both participants through the room event.
+          resolve({ ok: true })
+        },
+      )
+    })
   }
 
   function deleteConversation(conversationId: string) {
@@ -832,7 +841,7 @@ export function MessagesPage() {
     }
 
     return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      socket.timeout(5000).emit(
+      socket.timeout(30_000).emit(
         'delete_conversation',
         { conversationId },
         (timeoutError: Error | null, response?: { ok: boolean; error?: string; deletion?: ConversationDeletion }) => {

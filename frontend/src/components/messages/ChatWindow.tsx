@@ -22,7 +22,7 @@ type ChatWindowProps = {
   onSendMessage: (content: string) => Promise<SendMessageResult>
   onSendImage: (file: File, signal: AbortSignal) => Promise<SendMessageResult>
   onEditMessage: (messageId: string, content: string) => Promise<EditMessageResult>
-  onDeleteMessage: (messageId: string) => void
+  onDeleteMessage: (messageId: string) => Promise<SendMessageResult>
   onToggleReaction: (messageId: string, emoji: string) => void
   onBlockParticipant: (participantId: string) => Promise<SendMessageResult>
   isHistoryLoading: boolean
@@ -41,6 +41,8 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
   const [editError, setEditError] = useState('')
   const [isEditingMessage, setIsEditingMessage] = useState(false)
   const [messageIdPendingDeletion, setMessageIdPendingDeletion] = useState<string | null>(null)
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [sendError, setSendError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [dismissedReactionPickerId, setDismissedReactionPickerId] = useState<string | null>(null)
@@ -54,6 +56,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
   const scrollStateRef = useRef<{ conversationId?: string; messageCount: number }>({ messageCount: 0 })
   const isSendingRef = useRef(false)
   const isEditingRef = useRef(false)
+  const isDeletingRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const imageUploadControllerRef = useRef<AbortController | null>(null)
 
@@ -85,6 +88,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
     setEditingContent('')
     setEditError('')
     setMessageIdPendingDeletion(null)
+    setDeleteError('')
   }, [isParticipantBlocked])
 
   if (!conversation) {
@@ -185,7 +189,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
   }
 
   async function handleBlockParticipant() {
-    if (!conversation || isBlockingParticipant || isSendingRef.current || isParticipantBlocked) return
+    if (!conversation || isBlockingParticipant || isSendingRef.current || isDeletingRef.current || isParticipantBlocked) return
 
     setIsBlockingParticipant(true)
     setBlockError('')
@@ -206,6 +210,23 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
     }
   }
 
+  async function confirmMessageDeletion() {
+    if (!messageIdPendingDeletion || isDeletingRef.current || isParticipantBlocked) return
+    isDeletingRef.current = true
+    setIsDeletingMessage(true)
+    setDeleteError('')
+    try {
+      const result = await onDeleteMessage(messageIdPendingDeletion)
+      if (result.ok) setMessageIdPendingDeletion(null)
+      else setDeleteError(result.error ?? 'Unable to finish deleting the message. Please try again.')
+    } catch {
+      setDeleteError('Unable to finish deleting the message. Please try again.')
+    } finally {
+      isDeletingRef.current = false
+      setIsDeletingMessage(false)
+    }
+  }
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#fffdf9]">
       <header className="shrink-0 border-b border-[#757A5E]/15 bg-white px-5 py-4 sm:px-7">
@@ -220,7 +241,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
             <button type="button" onClick={() => setIsActionsMenuOpen((isOpen) => !isOpen)} className="grid h-10 w-10 place-items-center rounded-full text-xl font-bold text-[#344336] transition hover:bg-[#FABF6B]/20" aria-label={`Conversation actions for ${conversation.participantName}`} aria-expanded={isActionsMenuOpen}>⋮</button>
             {isActionsMenuOpen && (
               <div className="absolute right-0 top-11 z-20 w-36 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                <button type="button" disabled={isParticipantBlocked || isSending} onClick={() => { setIsActionsMenuOpen(false); setBlockError(''); setIsBlockDialogOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#C44B3B] transition hover:bg-[#D15A4A]/10 disabled:cursor-not-allowed disabled:opacity-50">{isParticipantBlocked ? 'Blocked' : 'Block user'}</button>
+                <button type="button" disabled={isParticipantBlocked || isSending || isDeletingMessage} onClick={() => { setIsActionsMenuOpen(false); setBlockError(''); setIsBlockDialogOpen(true) }} className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#C44B3B] transition hover:bg-[#D15A4A]/10 disabled:cursor-not-allowed disabled:opacity-50">{isParticipantBlocked ? 'Blocked' : 'Block user'}</button>
               </div>
             )}
           </div>
@@ -262,7 +283,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
                   ) : (
                     <>
                       {message.imagePath ? (
-                        <MessageImage conversationId={conversation.id} messageId={message.id} currentUserId={currentUserId} />
+                        <MessageImage conversationId={conversation.id} messageId={message.id} currentUserId={currentUserId} initialImage={message.image} />
                       ) : (
                         <p className="break-words [overflow-wrap:anywhere] text-sm leading-6">{message.content}</p>
                       )}
@@ -284,7 +305,7 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
                   {isOwnMessage && !isEditing && !isParticipantBlocked && (
                     <span className="hidden gap-2 group-hover/action:flex">
                       {!message.imagePath && <button onClick={() => startEditing(message)} className="hover:text-teal-700">Edit</button>}
-                        <button onClick={() => setMessageIdPendingDeletion(message.id)} className="hover:text-[#D7885C]">Delete</button>
+                        <button onClick={() => { setDeleteError(''); setMessageIdPendingDeletion(message.id) }} className="hover:text-[#D7885C]">Delete</button>
                     </span>
                   )}
                 </div>
@@ -333,9 +354,10 @@ export function ChatWindow({ conversation, currentUserId, onSendMessage, onSendI
             <h3 id="delete-message-title" className="text-lg font-bold text-[#344336]">Delete message?</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">This message and its reactions will be deleted.</p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setMessageIdPendingDeletion(null)} className="rounded-lg border border-[#757A5E]/30 px-4 py-2 text-sm font-semibold text-[#344336] transition hover:bg-[#FABF6B]/15">Cancel</button>
-              <button type="button" onClick={() => { onDeleteMessage(messageIdPendingDeletion); setMessageIdPendingDeletion(null) }} className="rounded-lg bg-[#D7885C] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#344336]">Delete</button>
+              <button type="button" disabled={isDeletingMessage} onClick={() => setMessageIdPendingDeletion(null)} className="rounded-lg border border-[#757A5E]/30 px-4 py-2 text-sm font-semibold text-[#344336] transition hover:bg-[#FABF6B]/15 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={isDeletingMessage} onClick={confirmMessageDeletion} className="rounded-lg bg-[#D7885C] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#344336] disabled:cursor-not-allowed disabled:opacity-50">{isDeletingMessage ? 'Deleting...' : 'Delete'}</button>
             </div>
+            {deleteError && <p role="alert" className="mt-3 text-xs text-rose-600">{deleteError}</p>}
           </div>
         </div>
       )}

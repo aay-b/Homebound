@@ -14,11 +14,14 @@ export type MessageReaction = {
   reactors: Array<{ id: string; name: string }>
 }
 
+export type MessageImageSource = { url: string; expiresAt: string }
+
 export type Message = {
   id: string
   senderId: string
   content: string
   imagePath: string | null
+  image?: MessageImageSource | null
   createdAt: string
   sentAt: string
   edited?: boolean

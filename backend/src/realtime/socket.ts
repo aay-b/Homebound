@@ -385,6 +385,11 @@ export function createSocketServer(httpServer: HttpServer) {
           return
         }
 
+        if (result.status === 'storage_unavailable') {
+          acknowledge?.({ ok: false, error: 'Unable to finish deleting the image. Please try again.' })
+          return
+        }
+
         // The deletion is final and cascades to reactions before viewers receive this event.
         const room = conversationRoom(BigInt(result.deletion.conversationId))
         socket.join(room)
@@ -412,6 +417,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
         if (result.status === 'not_a_member') {
           acknowledge?.({ ok: false, error: 'User is not a conversation member.' })
+          return
+        }
+
+        if (result.status === 'storage_unavailable') {
+          acknowledge?.({ ok: false, error: 'Unable to remove the conversation images. Please try again.' })
           return
         }
 

@@ -1,4 +1,5 @@
 import { supabase } from '@/config/supabase'
+import type { MessageImageSource } from '@/types/messages'
 
 export type StoredReaction = {
   emoji: string
@@ -13,6 +14,7 @@ export type StoredMessage = {
   senderId: string
   content: string
   imagePath: string | null
+  image?: MessageImageSource | null
   createdAt: string
   editedAt: string | null
   reactions: StoredReaction[]
@@ -30,7 +32,7 @@ type MessageImageUpload = {
   signedUrl: string
 }
 
-type MessageImageUrl = { url: string; expiresAt: string }
+type MessageImageUrl = MessageImageSource
 const imageUrlCache = new Map<string, MessageImageUrl>()
 
 export async function uploadConversationImage(conversationId: string, file: File, signal?: AbortSignal): Promise<string> {

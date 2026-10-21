@@ -43,6 +43,8 @@ model Message {
   conversationId BigInt            @map("conversation_id")
   senderId       BigInt            @map("sender_id")
   content        String
+  /// Storage object path in the private message-images bucket, not an expiring signed URL.
+  imagePath      String?           @unique(map: "messages_image_path_key") @map("image_path")
   createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   editedAt       DateTime?         @map("edited_at") @db.Timestamptz(6)
   deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)

@@ -3,6 +3,7 @@ import { Server } from 'socket.io'
 import { isAllowedClientOrigin } from '@/config/env.js'
 import { prisma } from '@/config/prisma.js'
 import { supabase } from '@/config/supabase.js'
+import { findAuthenticatedMessagingUser } from '@/modules/messages/messaging-auth.js'
 import { blockedMessagingError, blockUser, getBlockedUsers, unblockUser, type BlockedUser, type UserBlockEvent, type UserUnblockEvent } from '@/modules/messages/blocking.service.js'
 import { deleteConversation, type ConversationDeletion } from '@/modules/messages/conversations.service.js'
 import type { MessageRequestParticipant } from '@/modules/messages/message-requests.service.js'
@@ -21,6 +22,7 @@ type UnblockUserAcknowledgement = (response: { ok: boolean; error?: string; bloc
 type SendMessagePayload = {
   conversationId: unknown
   content: unknown
+  imagePath?: unknown
 }
 
 type ToggleReactionPayload = {
@@ -88,19 +90,24 @@ export function emitMessageRequestCancelled(recipientId: bigint, requestId: stri
 
 function toDatabaseId(value: unknown) {
   // Socket payloads are untrusted strings, so reject values that cannot be safe database IDs.
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null
-  return BigInt(value)
+  if (typeof value !== 'string' || !/^[1-9]\d{0,18}$/.test(value)) return null
+  const id = BigInt(value)
+  return id <= 9223372036854775807n ? id : null
 }
 
-function parseSendMessagePayload(value: unknown): { conversationId: bigint; content: string } | null {
+function parseSendMessagePayload(value: unknown): { conversationId: bigint; content: string; imagePath?: string } | null {
   // Validate the event payload before it reaches the persistence layer.
   if (!value || typeof value !== 'object') return null
 
   const payload = value as SendMessagePayload
   const conversationId = toDatabaseId(payload.conversationId)
-  if (!conversationId || typeof payload.content !== 'string') return null
+  const content = payload.content === undefined ? '' : payload.content
+  const imagePath = payload.imagePath == null ? undefined : payload.imagePath
+  if (!conversationId || typeof content !== 'string') return null
+  if (imagePath !== undefined && typeof imagePath !== 'string') return null
+  if (payload.content === undefined && imagePath === undefined) return null
 
-  return { conversationId, content: payload.content }
+  return { conversationId, content, imagePath }
 }
 
 function parseToggleReactionPayload(value: unknown): { messageId: bigint; emoji: string } | null {
@@ -161,10 +168,8 @@ export function createSocketServer(httpServer: HttpServer) {
       if (typeof accessToken !== 'string') return next(new Error('Authentication required.'))
       const { data, error } = await supabase.auth.getUser(accessToken)
       if (error || !data.user) return next(new Error('Invalid or expired session.'))
-      const name = data.user.user_metadata.name
-      if (typeof name !== 'string' || !name.trim()) return next(new Error('The account has no display name.'))
       // Match /users/me: the numeric messaging identity must belong to the authenticated account.
-      const user = await prisma.user.findFirst({ where: { name }, select: { id: true } })
+      const user = await findAuthenticatedMessagingUser(data.user)
       if (!user || user.id !== userId) return next(new Error('Messaging account does not match the authenticated user.'))
 
       socket.data.userId = userId
@@ -256,14 +261,34 @@ export function createSocketServer(httpServer: HttpServer) {
       try {
         const payload = parseSendMessagePayload(payloadValue)
         if (!payload) {
-          acknowledge?.({ ok: false, error: 'A valid conversation ID and message content are required.' })
+          acknowledge?.({ ok: false, error: 'A valid conversation ID and message text or image are required.' })
           return
         }
 
-        const result = await createMessage(payload.conversationId, userId, payload.content)
+        const result = await createMessage(payload.conversationId, userId, payload.content, payload.imagePath)
 
         if (result.status === 'empty_content') {
-          acknowledge?.({ ok: false, error: 'Message content cannot be empty.' })
+          acknowledge?.({ ok: false, error: 'A message must contain text or an image.' })
+          return
+        }
+
+        if (result.status === 'mixed_content') {
+          acknowledge?.({ ok: false, error: 'Send images and text as separate messages.' })
+          return
+        }
+
+        if (result.status === 'invalid_image') {
+          acknowledge?.({ ok: false, error: 'The image upload is missing or invalid. Please upload it again.' })
+          return
+        }
+
+        if (result.status === 'image_already_used') {
+          acknowledge?.({ ok: false, error: 'This image has already been sent. Please upload it again to send another message.' })
+          return
+        }
+
+        if (result.status === 'storage_unavailable') {
+          acknowledge?.({ ok: false, error: 'Unable to verify the image upload. Please try again.' })
           return
         }
 
@@ -302,6 +327,11 @@ export function createSocketServer(httpServer: HttpServer) {
 
         if (result.status === 'empty_content') {
           acknowledge?.({ ok: false, error: 'Message content cannot be empty.' })
+          return
+        }
+
+        if (result.status === 'image_not_editable') {
+          acknowledge?.({ ok: false, error: 'Image messages cannot be edited.' })
           return
         }
 

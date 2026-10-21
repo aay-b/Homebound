@@ -1,3 +1,5 @@
+import { supabase } from '@/config/supabase'
+
 export type StoredReaction = {
   emoji: string
   count: number
@@ -10,6 +12,7 @@ export type StoredMessage = {
   conversationId: string
   senderId: string
   content: string
+  imagePath: string | null
   createdAt: string
   editedAt: string | null
   reactions: StoredReaction[]
@@ -27,8 +30,13 @@ export async function getConversationMessages(
   conversationId: string,
   signal?: AbortSignal,
 ): Promise<StoredMessage[]> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('You must be signed in to open messages.')
   const searchParams = new URLSearchParams({ currentUserId })
-  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages?${searchParams}`, { signal })
+  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages?${searchParams}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    signal,
+  })
   const payload = await response.json() as ConversationMessagesResponse
 
   if (!response.ok) throw new Error(payload.message ?? 'Unable to load conversation messages.')

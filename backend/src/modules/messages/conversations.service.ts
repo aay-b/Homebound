@@ -1,4 +1,5 @@
 import { prisma } from '@/config/prisma.js'
+import { removeMessageImages } from '@/modules/messages/message-images.service.js'
 
 type ConversationsResult =
   | { status: 'not_found'; conversations: [] }
@@ -79,10 +80,15 @@ export async function deleteConversation(
   conversationId: bigint,
   currentUserId: bigint,
 ): Promise<DeleteConversationResult> {
-  return prisma.$transaction(async (transaction) => {
+  let imagePaths: string[] = []
+  const result = await prisma.$transaction<DeleteConversationResult>(async (transaction) => {
     const conversation = await transaction.conversation.findUnique({
       where: { id: conversationId },
-      select: { id: true, members: { select: { userId: true } } },
+      select: {
+        id: true,
+        members: { select: { userId: true } },
+        messages: { where: { imagePath: { not: null } }, select: { imagePath: true } },
+      },
     })
 
     if (!conversation) return { status: 'not_found' }
@@ -100,6 +106,7 @@ export async function deleteConversation(
 
     // Database foreign keys cascade from the conversation to members, messages, and message reactions.
     await transaction.conversation.delete({ where: { id: conversationId } })
+    imagePaths = conversation.messages.flatMap((message) => message.imagePath ? [message.imagePath] : [])
 
     return {
       status: 'deleted',
@@ -109,4 +116,6 @@ export async function deleteConversation(
       },
     }
   })
+  if (result.status === 'deleted') await removeMessageImages(imagePaths)
+  return result
 }

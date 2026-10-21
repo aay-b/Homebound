@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { requireAuth } from '@/modules/auth/auth.middleware.js'
-import { prisma } from '@/config/prisma.js'
 import { searchPeople } from '@/modules/users/users.service.js'
 import { getMessagingAvatarUrls } from '@/modules/users/user-avatars.service.js'
+import { findAuthenticatedMessagingUser } from '@/modules/messages/messaging-auth.js'
 
 const searchPeopleQuerySchema = z.object({
   q: z.string().trim().min(1).max(100),
@@ -31,17 +31,7 @@ usersRouter.post('/avatars', requireAuth, async (request, response, next) => {
 
 usersRouter.get('/me', requireAuth, async (request, response, next) => {
   try {
-    const name = request.user.user_metadata.name
-    if (typeof name !== 'string' || !name.trim()) {
-      response.status(400).json({ message: 'The authenticated account has no display name.' })
-      return
-    }
-
-    // Registration creates this matching row in Users, which supplies the numeric messaging ID.
-    const user = await prisma.user.findFirst({
-      where: { name },
-      select: { id: true, name: true, role: true },
-    })
+    const user = await findAuthenticatedMessagingUser(request.user)
 
     if (!user) {
       response.status(404).json({ message: 'No messaging account matches the authenticated user.' })

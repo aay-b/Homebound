@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function PetLayout({ children }: { children: ReactNode }) {
     const { user } = useAuth();
+    const location = useLocation();
+    const isReportPage = location.pathname.replace(/\/+$/, "").toLowerCase() === "/report-issue";
     return (
         <div className="min-h-screen bg-stone-50 text-stone-900">
             <header className="border-b border-stone-200 bg-white">
@@ -14,6 +16,14 @@ export default function PetLayout({ children }: { children: ReactNode }) {
                         <Link to="/pets">Find a Pet</Link>
                         {user && <Link to="/pets/manage">Manage Listings</Link>}
                         {user && <Link to="/applications">My Applications</Link>}
+                        <Link
+                            to="/report-issue"
+                            replace={isReportPage}
+                            state={isReportPage ? location.state : {
+                                reportReturnTo: `${location.pathname}${location.search}${location.hash}`,
+                                reportReturnState: location.state,
+                            }}
+                        >Report Issues</Link>
                         <Link to={user ? "/profile" : "/login"}>{user ? "My Profile" : "Log in"}</Link>
                     </div>
                 </nav>

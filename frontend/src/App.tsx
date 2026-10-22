@@ -10,6 +10,7 @@ import PetDetailPage from '@/pages/PetDetailPage'
 import Pets from '@/pages/Pets'
 import PetForm from '@/pages/PetForm'
 import ManagePets from '@/pages/ManagePets'
+import ReportIssue from '@/pages/ReportIssue'
 
 import UserApplicationDashboard from "./pages/UserApplicationDashboard";
 import UserApplicationView from "./pages/UserApplicationView";
@@ -28,6 +29,7 @@ export function App() {
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
                 <Route path="/pets" element={<Pets />} />
+                <Route path="/report-issue" element={<ProtectedRoute><ReportIssue /></ProtectedRoute>} />
                 <Route path="/pets/:id" element={<PetDetailPage />} />
                 <Route path="/pets/manage" element={<ProtectedRoute><ManagePets /></ProtectedRoute>} />
                 <Route path="/pets/new" element={<ProtectedRoute><PetForm /></ProtectedRoute>} />

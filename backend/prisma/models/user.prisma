@@ -12,6 +12,7 @@ model User {
   reactions                MessageReaction[]
   blocksInitiated          UserBlock[]          @relation("UserBlockBlocker")
   blocksReceived           UserBlock[]          @relation("UserBlockBlocked")
+  submittedIssueReports    PlatformIssueReport[]
 
   @@map("Users")
 }

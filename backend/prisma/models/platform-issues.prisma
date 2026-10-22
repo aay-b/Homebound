@@ -1,0 +1,14 @@
+/// A platform issue submitted by an authenticated user for administrative review.
+model PlatformIssueReport {
+  id          BigInt   @id @default(autoincrement())
+  reporterId  BigInt   @map("reporter_id")
+  title       String   @db.VarChar(150)
+  category    String   @db.VarChar(50)
+  description String   @db.VarChar(5000)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reporter    User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([reporterId, createdAt(sort: Desc)], map: "platform_issue_reports_reporter_created_at_index")
+  @@index([createdAt(sort: Desc)], map: "platform_issue_reports_created_at_index")
+  @@map("PlatformIssueReports")
+}

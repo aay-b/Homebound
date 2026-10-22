@@ -9,6 +9,7 @@ import { conversationsRouter } from '@/modules/messages/conversations.router.js'
 import { messageRequestsRouter } from '@/modules/messages/message-requests.router.js'
 import { messagesRouter } from '@/modules/messages/messages.router.js'
 import { profileRouter } from '@/modules/profile/profile.routes.js'
+import { platformIssuesRouter } from '@/modules/platform-issues/platform-issues.router.js'
 import { usersRouter } from '@/modules/users/users.router.js'
 import { createPetRouter } from '@/modules/pets/pet.routes.js'
 import { createPetManagementRouter } from '@/modules/pets/pet.management.js'
@@ -30,3 +31,4 @@ app.use('/api/message-requests', messageRequestsRouter)
 app.use('/api/conversations', conversationsRouter)
 app.use('/api/conversations', messagesRouter)
 app.use('/api/profile', profileRouter)
+app.use('/api/platform-issues', platformIssuesRouter)

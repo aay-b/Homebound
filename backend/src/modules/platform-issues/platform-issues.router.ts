@@ -21,7 +21,7 @@ platformIssuesRouter.post('/', requireAuth, async (request, response) => {
   }
 
   try {
-    // Reuse the verified Auth-email lookup for public.Users; never trust a reporter ID from the form.
+    // Reuse the verified Auth-UUID lookup for public.Users; never trust a reporter ID from the form.
     const reporter = await findAuthenticatedMessagingUser(request.user)
     if (!reporter) {
       response.status(403).json({ message: 'Unable to find your account. Please sign in again.' })

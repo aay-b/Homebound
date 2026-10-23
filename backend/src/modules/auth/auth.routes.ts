@@ -1,13 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '@/config/prisma.js'
+import { Prisma } from '@/generated/prisma/client.js'
 import { supabase, supabaseAuth } from '@/config/supabase.js'
 
 export const authRouter = Router()
 
 const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters long'),
-  email: z.string().email('Please enter a valid email address'),
+  name: z.string().trim().min(2, 'Name must be at least 2 characters long'),
+  email: z.string().trim().email('Please enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
 })
 
@@ -53,14 +54,10 @@ authRouter.post('/register', async (request, response) => {
 
   try {
     const role = inferMessagingRole(name)
-    // Display names are not unique, so resolve the matching messaging user before creating one.
-    const existingMessagingUser = await prisma.user.findFirst({ where: { name } })
-    const messagingUser = existingMessagingUser
-      ? await prisma.user.update({
-          where: { id: existingMessagingUser.id },
-          data: { email, role },
-        })
-      : await prisma.user.create({ data: { name, email, role } })
+    // A new Auth identity gets its own application user, even when display names are identical.
+    const messagingUser = await prisma.user.create({
+      data: { authUserId: data.user.id, name, email: data.user.email ?? email, role },
+    })
 
     return response.status(201).json({
       message: 'Account created successfully',
@@ -73,9 +70,25 @@ authRouter.post('/register', async (request, response) => {
       },
     })
   } catch (databaseError) {
-    // Do not leave a usable Auth account when the linked messaging row was not created.
-    await supabase.auth.admin.deleteUser(data.user.id)
-    console.error('Messaging user creation error:', databaseError)
+    // Do not leave a usable Auth account when its linked application user was not created.
+    let rollbackFailed = false
+    try {
+      const { error: rollbackError } = await supabase.auth.admin.deleteUser(data.user.id)
+      rollbackFailed = Boolean(rollbackError)
+    } catch {
+      rollbackFailed = true
+    }
+    if (rollbackFailed) {
+      console.error('Unable to roll back an incomplete account registration.')
+      return response.status(500).json({ message: 'Unable to create account. Please contact support before trying again.' })
+    }
+    if (databaseError instanceof Prisma.PrismaClientKnownRequestError && databaseError.code === 'P2002') {
+      return response.status(409).json({ message: 'An account with this email already exists' })
+    }
+    console.error('Account profile creation failed.', {
+      name: databaseError instanceof Error ? databaseError.name : 'UnknownError',
+      code: databaseError instanceof Prisma.PrismaClientKnownRequestError ? databaseError.code : undefined,
+    })
 
     return response.status(500).json({ message: 'Unable to create account profile' })
   }

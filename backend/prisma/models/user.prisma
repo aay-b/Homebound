@@ -1,5 +1,7 @@
 /// Represents every account that can participate in messaging.
 model User {
+  /// Stable Auth identity; the SQL migration manages the foreign key to auth.users.
+  authUserId               String?              @unique(map: "users_auth_user_id_key") @map("auth_user_id") @db.Uuid
   id                       BigInt               @id @default(autoincrement())
   name                     String
   email                    String               @unique

@@ -6,11 +6,6 @@ import { requireAuth } from "@/modules/auth/auth.middleware.js";
 
 export const profileRouter = Router();
 
-function inferMessagingRole(name: string) {
-    // Keep the messaging role aligned with the temporary registration rule.
-    return /\b(shelter|rescue)\b/i.test(name) ? "shelter_staff" : "user";
-}
-
 const profileSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
     phone: z
@@ -54,18 +49,12 @@ profileRouter.put("/", requireAuth, async (request, response) => {
     }
 
     const { name, phone, address, profilePicturePath } = result.data;
-    const previousName = request.user.user_metadata.name;
 
-    if (typeof previousName === "string" && previousName) {
-        // Messages resolve the signed-in account through its display name, so update its matching row too.
-        const messagingUser = await prisma.user.findFirst({ where: { name: previousName } });
-        if (messagingUser) {
-            await prisma.user.update({
-                where: { id: messagingUser.id },
-                data: { name, role: inferMessagingRole(name) },
-            });
-        }
-    }
+    // Names are editable and non-unique. Update only the linked account and keep its role unchanged.
+    await prisma.user.updateMany({
+        where: { authUserId: request.user.id },
+        data: { name },
+    });
 
     const { error: authError } = await supabase.auth.admin.updateUserById(request.user.id, {
         user_metadata: { ...request.user.user_metadata, name },

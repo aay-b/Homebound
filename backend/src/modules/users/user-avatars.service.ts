@@ -4,29 +4,26 @@ import { supabase } from '@/config/supabase.js'
 export async function getMessagingAvatarUrls(userIds: bigint[]): Promise<Record<string, string | null>> {
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, name: true },
+    select: { id: true, authUserId: true },
   })
   const avatars: Record<string, string | null> = Object.fromEntries(users.map((user) => [user.id.toString(), null]))
   if (users.length === 0) return avatars
 
-  const names = [...new Set(users.map((user) => user.name))]
-  // Registration and Profile currently synchronize display names rather than a shared user foreign key.
-  // Ambiguous names use the default avatar instead of exposing another account's picture.
-  const [profiles, nameCounts] = await Promise.all([
-    prisma.profile.findMany({
-      where: { name: { in: names } },
-      select: { name: true, userId: true, profilePicturePath: true, updatedAt: true },
-    }),
-    prisma.user.groupBy({ by: ['name'], where: { name: { in: names } }, _count: { _all: true } }),
-  ])
-  const uniqueUserNames = new Set(nameCounts.filter((entry) => entry._count._all === 1).map((entry) => entry.name))
-  const profilesByName = new Map<string, (typeof profiles)[number] | null>()
-  for (const profile of profiles) profilesByName.set(profile.name, profilesByName.has(profile.name) ? null : profile)
+  const authUserIds = users.flatMap(user => user.authUserId ? [user.authUserId] : [])
+  if (authUserIds.length === 0) return avatars
+
+  // Profile.userId and Users.authUserId identify the same Auth account, regardless of display names.
+  const profiles = await prisma.profile.findMany({
+    where: { userId: { in: authUserIds } },
+    select: { userId: true, profilePicturePath: true, updatedAt: true },
+  })
+  const profilesByAuthId = new Map(profiles.map(profile => [profile.userId, profile]))
 
   const pictures = users.flatMap((user) => {
-    const profile = profilesByName.get(user.name)
+    if (!user.authUserId) return []
+    const profile = profilesByAuthId.get(user.authUserId)
     const path = profile?.profilePicturePath
-    if (!uniqueUserNames.has(user.name) || !profile || !path || !path.startsWith(`${profile.userId}/`) || path.split('/').includes('..')) return []
+    if (!profile || !path || !path.startsWith(`${user.authUserId}/`) || path.split('/').includes('..')) return []
     return [{ id: user.id.toString(), path, updatedAt: profile.updatedAt.getTime() }]
   })
   if (pictures.length === 0) return avatars

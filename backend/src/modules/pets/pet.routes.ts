@@ -1,18 +1,24 @@
 import { Router } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { petSearchSchema, petSearchFilter } from './pet.search.js';
 import { requireAuth } from '../auth/auth.middleware.js';
 
 export function createPetRouter(supabase: SupabaseClient) {
     const router = Router();
 
     router.get('/', async (req, res) => {
+        const parsed = petSearchSchema.safeParse(req.query);
+        if (!parsed.success) return res.status(400).json({ message: 'Search must be a single text value of 200 characters or fewer.' });
         const offset = Number(req.query.offset ?? 0);
         if (!Number.isSafeInteger(offset) || offset < 0) return res.status(400).json({ message: 'Invalid page.' });
         const pageSize = 24;
         try {
-            const { data, error } = await supabase.from('Listings')
+            let query = supabase.from('Listings')
                 .select('id, pet_name, species, breed, age, photo_paths, available, shelter:Shelters(shelter_name)')
-                .eq('available', true).order('created_at', { ascending: false }).order('id', { ascending: false })
+                .eq('available', true);
+            if (parsed.data.q) query = query.or(petSearchFilter(parsed.data.q));
+            const { data, error } = await query
+                .order('created_at', { ascending: false }).order('id', { ascending: false })
                 .range(offset, offset + pageSize);
             if (error) throw error;
             const rows = data ?? [];

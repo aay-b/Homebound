@@ -66,19 +66,22 @@ export default function Pets() {
             }}>
                 <label htmlFor="pet-search" className="mb-2 block font-medium">Search pets</label>
                 <div className="flex flex-wrap gap-3">
-                    <input id="pet-search" type="search" maxLength={200} value={searchInput}
+                    <input id="pet-search" type="search" maxLength={200} value={searchInput} aria-describedby="pet-search-help"
                         onChange={event => setSearchInput(event.target.value)}
-                        placeholder="Search by name or description"
+                        placeholder="Name, species, breed, age, or keyword"
                         className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3" />
                     <button type="submit" className="rounded-full bg-stone-900 px-6 py-3 text-white">Search</button>
                 </div>
+                <p id="pet-search-help" className="mt-2 text-sm text-stone-600">
+                    Search by name, description, species, breed, or age. Submit an empty search to see all available pets.
+                </p>
             </form>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {pets.map(pet => <PetCard key={pet.id} pet={pet} />)}
             </div>
             {loading && <p role="status" className="mt-6">Loading pets...</p>}
             {error && <p role="alert" className="mt-6 text-red-700">{error}</p>}
-            {!loading && !error && pets.length === 0 && <p>{search ? 'No pets found.' : 'No pets are available right now. Please check back soon.'}</p>}
+            {!loading && !error && pets.length === 0 && <p role="status">{search ? `No pets found for “${search}”. Try another name, species, breed, age, or keyword.` : 'No pets are available right now. Please check back soon.'}</p>}
             {!loading && nextOffset !== null && <button onClick={loadMore} className="mt-6 rounded-full bg-stone-900 px-6 py-3 text-white">
                 {error ? 'Try again' : 'Load more pets'}
             </button>}

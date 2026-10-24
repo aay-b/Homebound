@@ -7,6 +7,6 @@ export const petSearchSchema = z.object({
 // Escape regex characters and quote the value for PostgREST's filter grammar.
 export function petSearchFilter(term: string) {
     const literal = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return ['pet_name', 'description']
+    return ['pet_name', 'description', 'species', 'breed', 'age']
         .map(field => `${field}.imatch.${JSON.stringify(literal)}`).join(',');
 }
